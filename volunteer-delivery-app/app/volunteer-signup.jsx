@@ -90,14 +90,18 @@ const FIELDS = [
   },
 ];
 
+// For the two stage sign-up flow
+const STEP_ONE_KEYS = ["firstName", "lastName", "phone", "email", "zip"];
+const STEP_TWO_KEYS = ["username", "password", "confirmPassword"];
+
 const INITIAL_VALUES = Object.fromEntries(
   FIELDS.map((field) => [field.key, ""]),
 );
 
-const validateForm = (values) => {
+const validateFields = (keys, values) => {
   const nextErrors = {};
 
-  FIELDS.forEach((field) => {
+  FIELDS.filter((field) => keys.includes(field.key)).forEach((field) => {
     const value = String(values[field.key] ?? "");
     const trimmedValue = value.trim();
 
@@ -121,6 +125,7 @@ export default function VolunteerSignupScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [submitState, setSubmitState] = useState("idle");
+  const [step, setStep] = useState(1);
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({
@@ -143,8 +148,28 @@ export default function VolunteerSignupScreen() {
     }
   };
 
+  const handleNext = () => {
+    const nextErrors = validateFields(STEP_ONE_KEYS, formValues);
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      setSubmitState("idle");
+      return;
+    }
+
+    setErrors({});
+    setSubmitState("idle");
+    setStep(2);
+  };
+
+  const handleBack = () => {
+    setErrors({});
+    setSubmitState("idle");
+    setStep(1);
+  };
+
   const handleSubmit = () => {
-    const nextErrors = validateForm(formValues);
+    const nextErrors = validateFields(STEP_TWO_KEYS, formValues);
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -155,6 +180,11 @@ export default function VolunteerSignupScreen() {
     setErrors({});
     setSubmitState("success");
   };
+
+  const visibleKeys = step === 1 ? STEP_ONE_KEYS : STEP_TWO_KEYS;
+  const visibleFields = FIELDS.filter((field) =>
+    visibleKeys.includes(field.key),
+  );
 
   return (
     <KeyboardAvoidingView
@@ -175,11 +205,14 @@ export default function VolunteerSignupScreen() {
         ) : null}
 
         <Text style={styles.title}>Volunteer Sign Up</Text>
-        <Text style={styles.subtitle}>
-          Enter your information to register as a volunteer.
+        <Text style={styles.subtitle}>Step {step} of 2</Text>
+        <Text style={styles.stepHint}>
+          {step === 1
+            ? "Enter your details to continue."
+            : "Create your volunteer account credentials."}
         </Text>
 
-        {FIELDS.map((field) => (
+        {visibleFields.map((field) => (
           <View key={field.key} style={styles.fieldWrapper}>
             <Text style={styles.label}>{field.label}</Text>
             <TextInput
@@ -200,11 +233,27 @@ export default function VolunteerSignupScreen() {
           </View>
         ))}
 
-        <AppButton
-          title="Create Volunteer Account"
-          onPress={handleSubmit}
-          style={styles.submitButton}
-        />
+        {step === 1 ? (
+          <AppButton
+            title="Next"
+            onPress={handleNext}
+            style={styles.submitButton}
+          />
+        ) : (
+          <View style={styles.stepTwoActions}>
+            <AppButton
+              title="Back"
+              variant="secondary"
+              onPress={handleBack}
+              style={[styles.actionButton, styles.backButton]}
+            />
+            <AppButton
+              title="Create Volunteer Account"
+              onPress={handleSubmit}
+              style={styles.actionButton}
+            />
+          </View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -242,6 +291,11 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 15,
     color: theme.colors.mutedText,
+    marginBottom: 6,
+  },
+  stepHint: {
+    fontSize: 15,
+    color: theme.colors.mutedText,
     marginBottom: 22,
   },
   fieldWrapper: {
@@ -273,5 +327,15 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     marginTop: 12,
+  },
+  stepTwoActions: {
+    marginTop: 12,
+    flexDirection: "row",
+  },
+  actionButton: {
+    flex: 1,
+  },
+  backButton: {
+    marginRight: 10,
   },
 });
