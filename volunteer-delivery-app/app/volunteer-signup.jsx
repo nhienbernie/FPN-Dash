@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../services/supabase";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -168,17 +169,51 @@ export default function VolunteerSignupScreen() {
     setStep(1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextErrors = validateFields(STEP_TWO_KEYS, formValues);
-
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
-      setSubmitState("idle");
       return;
     }
 
     setErrors({});
-    setSubmitState("success");
+    setSubmitState("submitting");
+
+    try {
+      // 1. Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formValues.email,
+        password: formValues.password,
+      });
+
+      if (authError) {
+        setErrors({ email: authError.message });
+        setSubmitState("idle");
+        return;
+      }
+
+      // 2. Insert volunteer profile
+      const { error: profileError } = await supabase.from("volunteers").insert({
+        uid: authData.user.id,
+        first_name: formValues.firstName,
+        last_name: formValues.lastName,
+        phone_number: formValues.phone,
+        email: formValues.email,
+        zip: formValues.zip,
+        username: formValues.username,
+      });
+
+      if (profileError) {
+        setErrors({ username: profileError.message });
+        setSubmitState("idle");
+        return;
+      }
+
+      setSubmitState("success");
+    } catch (err) {
+      setErrors({ email: "Something went wrong. Please try again." });
+      setSubmitState("idle");
+    }
   };
 
   const visibleKeys = step === 1 ? STEP_ONE_KEYS : STEP_TWO_KEYS;
