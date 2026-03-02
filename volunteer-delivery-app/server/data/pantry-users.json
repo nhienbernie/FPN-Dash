@@ -1,0 +1,62 @@
+[
+  {
+    "phone": "5550000001",
+    "firstName": "Demo",
+    "lastName": "UserOne",
+    "address": {
+      "line1": "100 Demo Way",
+      "line2": "",
+      "city": "Sampleville",
+      "state": "OH",
+      "zip": "43000"
+    }
+  },
+  {
+    "phone": "5550000002",
+    "firstName": "Testy",
+    "lastName": "McTestFace",
+    "address": {
+      "line1": "200 Placeholder Ave Apt 1",
+      "line2": "",
+      "city": "Mock City",
+      "state": "OH",
+      "zip": "43001"
+    }
+  },
+  {
+    "phone": "5550000003",
+    "firstName": "Example",
+    "lastName": "Person",
+    "address": {
+      "line1": "300 Fake St",
+      "line2": "",
+      "city": "Faketown",
+      "state": "OH",
+      "zip": "43002"
+    }
+  },
+  {
+    "phone": "5550000004",
+    "firstName": "Sample",
+    "lastName": "Data",
+    "address": {
+      "line1": "400 Lorem Ipsum Blvd",
+      "line2": "",
+      "city": "Demo City",
+      "state": "OH",
+      "zip": "43003"
+    }
+  },
+  {
+    "phone": "5550000005",
+    "firstName": "Placeholder",
+    "lastName": "Record",
+    "address": {
+      "line1": "500 Test Dr",
+      "line2": "Suite 123",
+      "city": "Exampleton",
+      "state": "OH",
+      "zip": "43004"
+    }
+  }
+]
