@@ -3,16 +3,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import AppButton from "../components/AppButton";
-import { theme } from "../theme";
-
-const isValidEmail = (value = "") =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+import {
+  buildInitialValues,
+  validateFieldSet,
+} from "../validators/volunteerValidators";
+import { styles } from "../styles/volunteerSignUpSignIn.styles";
 
 const FIELDS = [
   {
@@ -33,21 +33,7 @@ const FIELDS = [
   },
 ];
 
-const INITIAL_VALUES = { identifier: "", password: "" };
-
-const validateFields = (values) => {
-  const nextErrors = {};
-
-  FIELDS.forEach((field) => {
-    const value = String(values[field.key] ?? "").trim();
-
-    if (field.required && !value) {
-      nextErrors[field.key] = `${field.label} is required.`;
-    }
-  });
-
-  return nextErrors;
-};
+const INITIAL_VALUES = buildInitialValues(FIELDS);
 
 export default function SignInScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
@@ -70,7 +56,10 @@ export default function SignInScreen() {
   };
 
   const handleSubmit = () => {
-    const nextErrors = validateFields(formValues);
+    const nextErrors = validateFieldSet({
+      fields: FIELDS,
+      values: formValues,
+    });
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -133,69 +122,3 @@ export default function SignInScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
-  successBanner: {
-    backgroundColor: theme.colors.successBg,
-    borderWidth: 1,
-    borderColor: theme.colors.successBorder,
-    borderRadius: theme.radius.md,
-    padding: 12,
-    marginBottom: 16,
-  },
-  successText: {
-    color: theme.colors.successText,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: theme.colors.mutedText,
-    marginBottom: 22,
-  },
-  fieldWrapper: {
-    marginBottom: 14,
-  },
-  label: {
-    color: theme.colors.labelText,
-    fontSize: 14,
-    marginBottom: 6,
-    fontWeight: "600",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 15,
-    color: theme.colors.text,
-  },
-  inputError: {
-    borderColor: theme.colors.danger,
-  },
-  errorText: {
-    marginTop: 6,
-    color: theme.colors.errorText,
-    fontSize: 13,
-  },
-  submitButton: {
-    marginTop: 12,
-  },
-});
