@@ -13,6 +13,13 @@ export default function Index() {
       <AppButton
         title="Volunteer Sign Up"
         onPress={() => router.push("/volunteer-signup")}
+        style={styles.button}
+      />
+      <AppButton
+        title="Volunteer Sign In"
+        variant="secondary"
+        onPress={() => router.push("/volunteer-signin")}
+        style={styles.button}
       />
     </View>
   );
@@ -38,5 +45,9 @@ const styles = StyleSheet.create({
     color: theme.colors.mutedText,
     marginBottom: 28,
     textAlign: "center",
+  },
+  button: {
+    width: "100%",
+    marginBottom: 12,
   },
 });
