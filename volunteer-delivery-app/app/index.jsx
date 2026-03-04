@@ -9,16 +9,17 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Food Pantry Delivery</Text>
-      <Text style={styles.subtitle}>Volunteer onboarding portal</Text>
+      <Text style={styles.subtitle}>Supported by Volunteers</Text>
       <AppButton
-        title="Volunteer Sign Up"
-        onPress={() => router.push("/volunteer-signup")}
+        title="I Need Food"
+        // TODO: Link to user sign in page here
+        onPress={() => router.push("/volunteer_login_flow/volunteer-signup")}
         style={styles.button}
       />
       <AppButton
-        title="Volunteer Sign In"
+        title="I'm a Volunteer"
         variant="secondary"
-        onPress={() => router.push("/volunteer-signin")}
+        onPress={() => router.push("/volunteer_login_flow/volunteer-two-step")}
         style={styles.button}
       />
     </View>

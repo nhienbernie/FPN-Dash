@@ -7,12 +7,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import AppButton from "../components/AppButton";
+import AppButton from "../../components/AppButton";
 import {
   buildInitialValues,
   validateFieldSet,
-} from "../validators/volunteerValidators";
-import { styles } from "../styles/volunteerSignUpSignIn.styles";
+} from "../../validators/volunteerValidators";
+import { styles } from "../../styles/volunteerSignUpSignIn.styles";
 
 const FIELDS = [
   {
