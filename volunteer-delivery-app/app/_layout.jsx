@@ -8,6 +8,10 @@ export default function RootLayout() {
         name="volunteer-signup"
         options={{ title: "Volunteer Sign Up" }}
       />
+      <Stack.Screen
+        name="volunteer-signin"
+        options={{ title: "Volunteer Sign In" }}
+      />
     </Stack>
   );
 }

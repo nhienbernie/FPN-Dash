@@ -1,21 +1,22 @@
 import { useState } from "react";
-import { supabase } from "../services/supabase";
+import { supabase } from "../../services/supabase";
 import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import AppButton from "../components/AppButton";
-import { theme } from "../theme";
-
-const digitsOnly = (value = "") => value.replace(/\D/g, "");
-const isValidEmail = (value = "") =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-const isValidZip = (value = "") => /^\d{5}$/.test(value.trim());
+import AppButton from "../../components/AppButton";
+import { styles } from "../../styles/volunteerSignUpSignIn.styles";
+import {
+  buildInitialValues,
+  digitsOnly,
+  isValidEmail,
+  isValidZip,
+  validateFieldSet,
+} from "../../validators/volunteerValidators";
 
 const FIELDS = [
   {
@@ -95,32 +96,7 @@ const FIELDS = [
 const STEP_ONE_KEYS = ["firstName", "lastName", "phone", "email", "zip"];
 const STEP_TWO_KEYS = ["username", "password", "confirmPassword"];
 
-const INITIAL_VALUES = Object.fromEntries(
-  FIELDS.map((field) => [field.key, ""]),
-);
-
-const validateFields = (keys, values) => {
-  const nextErrors = {};
-
-  FIELDS.filter((field) => keys.includes(field.key)).forEach((field) => {
-    const value = String(values[field.key] ?? "");
-    const trimmedValue = value.trim();
-
-    if (field.required && !trimmedValue) {
-      nextErrors[field.key] = `${field.label} is required.`;
-      return;
-    }
-
-    if (trimmedValue && field.validate) {
-      const validationError = field.validate(value, values);
-      if (validationError) {
-        nextErrors[field.key] = validationError;
-      }
-    }
-  });
-
-  return nextErrors;
-};
+const INITIAL_VALUES = buildInitialValues(FIELDS);
 
 export default function VolunteerSignupScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
@@ -150,7 +126,11 @@ export default function VolunteerSignupScreen() {
   };
 
   const handleNext = () => {
-    const nextErrors = validateFields(STEP_ONE_KEYS, formValues);
+    const nextErrors = validateFieldSet({
+      fields: FIELDS,
+      values: formValues,
+      keys: STEP_ONE_KEYS,
+    });
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
@@ -170,7 +150,11 @@ export default function VolunteerSignupScreen() {
   };
 
   const handleSubmit = async () => {
-    const nextErrors = validateFields(STEP_TWO_KEYS, formValues);
+    const nextErrors = validateFieldSet({
+      fields: FIELDS,
+      values: formValues,
+      keys: STEP_TWO_KEYS,
+    });
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       return;
@@ -293,84 +277,3 @@ export default function VolunteerSignupScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
-  successBanner: {
-    backgroundColor: theme.colors.successBg,
-    borderWidth: 1,
-    borderColor: theme.colors.successBorder,
-    borderRadius: theme.radius.md,
-    padding: 12,
-    marginBottom: 16,
-  },
-  successText: {
-    color: theme.colors.successText,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: theme.colors.mutedText,
-    marginBottom: 6,
-  },
-  stepHint: {
-    fontSize: 15,
-    color: theme.colors.mutedText,
-    marginBottom: 22,
-  },
-  fieldWrapper: {
-    marginBottom: 14,
-  },
-  label: {
-    color: theme.colors.labelText,
-    fontSize: 14,
-    marginBottom: 6,
-    fontWeight: "600",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 15,
-    color: theme.colors.text,
-  },
-  inputError: {
-    borderColor: theme.colors.danger,
-  },
-  errorText: {
-    marginTop: 6,
-    color: theme.colors.errorText,
-    fontSize: 13,
-  },
-  submitButton: {
-    marginTop: 12,
-  },
-  stepTwoActions: {
-    marginTop: 12,
-    flexDirection: "row",
-  },
-  actionButton: {
-    flex: 1,
-  },
-  backButton: {
-    marginRight: 10,
-  },
-});
