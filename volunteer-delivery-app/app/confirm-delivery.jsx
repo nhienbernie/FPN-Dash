@@ -3,27 +3,17 @@ import { StyleSheet, Text, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { theme } from "../theme";
 
-export default function Index() {
+export default function ConfirmDelivery() {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Food Pantry Delivery</Text>
-      <Text style={styles.subtitle}>Volunteer onboarding portal</Text>
+      <Text style={styles.title}>Confirm Delivery</Text>
+      {/* future content will go here */}
       <AppButton
-        title="Volunteer Sign Up"
-        onPress={() => router.push("/volunteer-signup")}
-      />
-      <AppButton
-        title="Volunteer Dashboard"
+        title="Back to dashboard"
         onPress={() => router.push("/volunteer-dashboard")}
-        style={{ marginTop: 16 }}
-      />
-      {/* quick link for testing the new page */}
-      <AppButton
-        title="Confirm Delivery (test)"
-        onPress={() => router.push("/confirm-delivery")}
-        style={{ marginTop: 16 }}
+        style={{ marginTop: theme.spacing.md }}
       />
     </View>
   );
@@ -42,12 +32,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.colors.text,
     marginBottom: 8,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.mutedText,
-    marginBottom: 28,
     textAlign: "center",
   },
 });

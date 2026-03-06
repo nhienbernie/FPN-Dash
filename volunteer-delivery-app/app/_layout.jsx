@@ -8,6 +8,14 @@ export default function RootLayout() {
         name="volunteer-signup"
         options={{ title: "Volunteer Sign Up" }}
       />
+      <Stack.Screen
+        name="volunteer-dashboard"
+        options={{ title: "Volunteer Dashboard" }}
+      />
+      <Stack.Screen
+        name="confirm-delivery"
+        options={{ title: "Confirm Delivery" }}
+      />
     </Stack>
   );
 }
