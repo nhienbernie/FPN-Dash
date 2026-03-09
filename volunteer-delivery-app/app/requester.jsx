@@ -30,7 +30,7 @@ const FIELDS = [
     label: "Date of Birth",
     placeholder: "MM/DD/YYYY",
     required: true,
-    keyboardType: "number-pad",
+    keyboardType: "default",
     validate: (value) => {
       const trimmed = String(value).trim();
       if (!/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
