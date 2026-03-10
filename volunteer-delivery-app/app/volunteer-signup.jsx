@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
+import { supabase } from "../services/supabase";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -102,6 +104,7 @@ export default function VolunteerSignupScreen() {
   const [errors, setErrors] = useState({});
   const [submitState, setSubmitState] = useState("idle");
   const [step, setStep] = useState(1);
+  const router = useRouter();
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({
@@ -148,7 +151,7 @@ export default function VolunteerSignupScreen() {
     setStep(1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextErrors = validateFieldSet({
       fields: FIELDS,
       values: formValues,
@@ -157,12 +160,43 @@ export default function VolunteerSignupScreen() {
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      return;
+    }
+
+     try {
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: formValues.email,
+      password: formValues.password,
+    });
+
+    if (authError) {
+      setErrors({ email: authError.message });
       setSubmitState("idle");
       return;
     }
 
-    setErrors({});
+    const { error: profileError } = await supabase.from("volunteers").insert({
+      uid: authData.user.id,
+      first_name: formValues.firstName,
+      last_name: formValues.lastName,
+      phone_number: formValues.phone,
+      email: formValues.email,
+      zip: formValues.zip,
+      username: formValues.username,
+    });
+
+    if (profileError) {
+      setErrors({ username: profileError.message });
+      setSubmitState("idle");
+      return;
+    }
+
     setSubmitState("success");
+    router.replace("/volunteer-dashboard");
+    } catch (err) {
+      setErrors({ email: "Something went wrong. Please try again." });
+      setSubmitState("idle");
+    }
   };
 
   const visibleKeys = step === 1 ? STEP_ONE_KEYS : STEP_TWO_KEYS;
