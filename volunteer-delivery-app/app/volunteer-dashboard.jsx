@@ -68,10 +68,14 @@ export default function VolunteerDashboard() {
 
   const renderItem = ({ item }) => {
     // choose yellowish until accepted, then green
-    const backgroundColor =
+    /**const backgroundColor =
       item.status && item.status.toLowerCase() === "accepted"
         ? theme.colors.successBg
         : "#FEF3C7"; // light yellow
+    **/
+
+    const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
+    const backgroundColor = isAccepted ? "#FD9A3A" : "#FEF3C7"; 
 
     return (
       <View style={[styles.orderItem, { backgroundColor }]}>        
@@ -85,7 +89,12 @@ export default function VolunteerDashboard() {
           </Text>
           <Text style={styles.orderSubText}>{item.status}</Text>
         </View>
-        <AppButton title="Accept" onPress={() => setSelectedOrder(item)} />
+        <AppButton 
+          title={isAccepted ? "Accepted" : "Accept"}
+          disabled={isAccepted}
+          variant={isAccepted ? "secondary" : "primary"}
+          onPress={() => !isAccepted && setSelectedOrder(item)}
+        />
       </View>
     );
   };
@@ -133,8 +142,22 @@ export default function VolunteerDashboard() {
             )}
             <AppButton
               title="Confirm order"
-              onPress={() => {
+              //onPress={() => {
                 // close modal then navigate
+                //handleClose();
+                //router.push("/confirm-delivery");
+
+              onPress={async () => {
+                const { error } = await supabase
+                  .from("orders")
+                  .update({ status: "awaiting delivery" })
+                  .eq("order_id", selectedOrder.order_id);
+
+                if (error) {
+                  console.error("Error updating order:", error);
+                } else {
+                  fetchOrders(); // refresh the list
+                }
                 handleClose();
                 router.push("/confirm-delivery");
               }}
