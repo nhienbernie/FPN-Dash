@@ -3,26 +3,24 @@ import { StyleSheet, Text, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { theme } from "../theme";
 
-export default function Index() {
+export default function volunteerHome() {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Food Pantry Delivery</Text>
-      <Text style={styles.subtitle}>Supported by Volunteers</Text>
+      <Text style={styles.subtitle}>Customer onboarding portal</Text>
       <AppButton
-        title="I Need Food"
-        // TODO: Link to user sign in page here
-        onPress={() => router.push("/volunteer_login_flow/volunteer-signup")}
+        title="Customer Sign Up"
+        /*onPress={() => router.push("/customer-signup")}*/
         style={styles.button}
       />
       <AppButton
-        title="I'm a Volunteer"
+        title="Customer Sign In"
         variant="secondary"
-        onPress={() => router.push("/volunteer_login_flow/volunteer-two-step")}
+        /*onPress={() => router.push("/customer-signin")}*/
         style={styles.button}
       />
-
     </View>
   );
 }
