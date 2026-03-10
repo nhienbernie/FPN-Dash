@@ -22,9 +22,16 @@ export default function Index() {
         onPress={() => router.push("/volunteer_login_flow/volunteer-two-step")}
         style={styles.button}
       />
-
-    </View>
-  );
+      <AppButton
+        title="Volunteer Dashboard"
+        onPress={() => router.push("/volunteer-dashboard")}
+        style={{ marginTop: 16 }}
+      />
+      <AppButton
+        title="Confirm Delivery (test)"
+        onPress={() => router.push("/confirm-delivery")}
+        style={{ marginTop: 16 }}
+      />  );
 }
 
 const styles = StyleSheet.create({
