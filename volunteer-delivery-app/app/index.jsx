@@ -31,7 +31,9 @@ export default function Index() {
         title="Confirm Delivery (test)"
         onPress={() => router.push("/confirm-delivery")}
         style={{ marginTop: 16 }}
-      />  );
+      /> 
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
