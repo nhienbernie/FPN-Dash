@@ -12,6 +12,9 @@ import {
 import AppButton from "../components/AppButton";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { theme } from "../theme";
+import { useRouter } from "expo-router";
+import { supabase } from "../lib/supabase";
+import { digitsOnly } from "../validators/volunteerValidators";
 
 const FIELDS = [
   {
@@ -47,6 +50,7 @@ export default function RequesterScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [disclaimerVisible, setDisclaimerVisible] = useState(true);
+  const router = useRouter();
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -58,8 +62,9 @@ export default function RequesterScreen() {
     });
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     const nextErrors = {};
+
     FIELDS.forEach((field) => {
       const value = String(formValues[field.key] ?? "");
       const trimmed = value.trim();
@@ -78,7 +83,19 @@ export default function RequesterScreen() {
       return;
     }
 
-    // TODO: navigate to next requester step
+    const { data, error } = await supabase
+      .from("customers")
+      .select("uid")
+      .eq("phone_number", digitsOnly(formValues.phone))
+      .eq("dob", formValues.dob.trim())
+      .single();
+    
+    if (error || !data) {
+      setErrors({ general: "No account found. Please contact your pantry." });
+      return;
+    }
+
+    router.replace("/order-food");
   };
 
   return (
