@@ -93,9 +93,12 @@ export default function RequesterScreen() {
           <View style={modalStyles.card}>
             <Text style={modalStyles.title}>Disclaimer</Text>
             <Text style={modalStyles.body}>
-              The information you provide is used solely to verify your
-              eligibility for food assistance. All data is kept confidential
-              and will not be shared with third parties.
+              Our food pantry network operates with a limited number of
+              volunteers and restricted hours. To ensure resources are
+              available to those who need them most, please place an online
+              delivery order only if you are unable to visit a food pantry
+              location in person. We appreciate your understanding and
+              cooperation.
             </Text>
             <AppButton
               title="I Understand"
