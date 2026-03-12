@@ -142,24 +142,22 @@ export default function VolunteerDashboard() {
             )}
             <AppButton
               title="Confirm order"
-              //onPress={() => {
-                // close modal then navigate
-                //handleClose();
-                //router.push("/confirm-delivery");
-
-              onPress={async () => {
-                const { error } = await supabase
-                  .from("orders")
-                  .update({ status: "awaiting delivery" })
-                  .eq("order_id", selectedOrder.order_id);
-
-                if (error) {
-                  console.error("Error updating order:", error);
-                } else {
-                  fetchOrders(); // refresh the list
-                }
+              onPress={() => {
+                // close modal then navigate, passing order info as params
                 handleClose();
-                router.push("/confirm-delivery");
+                if (selectedOrder) {
+                  // stringify the whole order so confirm screen can inspect any fields
+                  router.push({
+                    pathname: "/confirm-delivery",
+                    params: {
+                      name: selectedOrder.name,
+                      address: selectedOrder.delivery_address,
+                      order: JSON.stringify(selectedOrder),
+                    },
+                  });
+                } else {
+                  router.push("/confirm-delivery");
+                }
               }}
             />
             <AppButton
