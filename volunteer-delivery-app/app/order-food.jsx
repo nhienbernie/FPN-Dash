@@ -1,24 +1,26 @@
 import { useEffect, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import AppButton from "../components/AppButton";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../services/supabase";
 import { theme } from "../theme";
+import { useLocalSearchParams } from "expo-router";
 
 export default function OrderFood() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderTime, setOrderTime] = useState(null);
   const [orderStatus, setOrderStatus] = useState("pending");
   const [orderId, setOrderId] = useState(null);
+  const { customerUid } = useLocalSearchParams();
   useEffect(() => {
     const checkExistingOrder = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        //const { data: { user } } = await supabase.auth.getUser();
+        //if (!user) return;
 
         const { data: order, error } = await supabase
           .from("orders")
           .select("order_id, status, created_at")
-          .eq("customer_uid", user.id)
+          .eq("customer_uid", customerUid)
           .single();
 
         if (order && !error) {
@@ -38,21 +40,26 @@ export default function OrderFood() {
 
   const handleOrderFood = async () => {
     setLoading(true);
+    console.log("customer UID:", customerUid);
     try {
       // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      /***const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         Alert.alert("Error", "User not authenticated.");
         setLoading(false);
         return;
       }
+      ***/
 
       // Fetch user data from customers table
       const { data: customer, error: fetchError } = await supabase
         .from("customers")
-        .select("uid, first_name, last_name, delivery_address")
-        .eq("uid", user.id)
+        .select("uid, first_name, last_name, address")
+        .eq("uid", customerUid)
         .single();
+
+      //console.log("customer:", customer);
+      //console.log("fetchError:", fetchError);
 
       if (fetchError || !customer) {
         Alert.alert("Error", "Failed to fetch user data.");
@@ -65,13 +72,14 @@ export default function OrderFood() {
         .from("orders")
         .insert({
           customer_uid: customer.uid,
-          first_name: customer.first_name,
-          last_name: customer.last_name,
-          delivery_address: customer.delivery_address,
+          name: customer.first_name,
+          delivery_address: customer.address,
           status: "pending",
         })
         .select()
         .single();
+      
+      //console.log("inserted order:", insertError);
 
       if (insertError) {
         if (insertError.code === '23505') { // UNIQUE violation

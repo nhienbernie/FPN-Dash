@@ -1,3 +1,6 @@
+import { useRouter } from "expo-router";
+import { supabase } from "../services/supabase";
+
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -47,6 +50,7 @@ export default function RequesterScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [disclaimerVisible, setDisclaimerVisible] = useState(true);
+  const router = useRouter();
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -58,27 +62,43 @@ export default function RequesterScreen() {
     });
   };
 
-  const handleNext = () => {
-    const nextErrors = {};
-    FIELDS.forEach((field) => {
-      const value = String(formValues[field.key] ?? "");
-      const trimmed = value.trim();
-      if (field.required && !trimmed) {
-        nextErrors[field.key] = `${field.label} is required.`;
-        return;
-      }
-      if (trimmed && typeof field.validate === "function") {
-        const err = field.validate(value, formValues);
-        if (err) nextErrors[field.key] = err;
-      }
-    });
-
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors);
+  const handleNext = async () => {
+  const nextErrors = {};
+  FIELDS.forEach((field) => {
+    const value = String(formValues[field.key] ?? "");
+    const trimmed = value.trim();
+    if (field.required && !trimmed) {
+      nextErrors[field.key] = `${field.label} is required.`;
       return;
     }
+    if (trimmed && typeof field.validate === "function") {
+      const err = field.validate(value, formValues);
+      if (err) nextErrors[field.key] = err;
+    }
+  });
 
-    // TODO: navigate to next requester step
+  if (Object.keys(nextErrors).length > 0) {
+    setErrors(nextErrors);
+    return;
+  }
+
+  // Look up customer by phone + DOB
+  const { data: customer, error } = await supabase
+    .from("customers")
+    .select("uid")
+    .eq("phone_number", formValues.phone.replace(/\D/g, ""))
+    .eq("dob", formValues.dob)
+    .single();
+
+  if (error || !customer) {
+    setErrors({ phone: "No account found with this phone number and date of birth." });
+    return;
+  }
+    //After customer is found, navigate to order food screen with customer UID as param
+    router.push({
+      pathname: "/order-food",
+      params: { customerUid: customer.uid }
+    });
   };
 
   return (
