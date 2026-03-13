@@ -3,21 +3,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { router } from "expo-router";
 import AppButton from "../components/AppButton";
-import { theme } from "../theme";
+import {
+  buildInitialValues,
+  validateFieldSet,
+} from "../validators/volunteerValidators";
+import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { supabase } from "../lib/supabase";
 
 const FIELDS = [
   {
-    key: "email",
-    label: "Email",
-    placeholder: "Enter your email address",
+    key: "identifier",
+    label: "Email or Username",
+    placeholder: "Enter your email or username",
     required: true,
     autoCapitalize: "none",
     keyboardType: "email-address",
@@ -32,60 +34,70 @@ const FIELDS = [
   },
 ];
 
-const INITIAL_VALUES = { email: "", password: "" };
+const INITIAL_VALUES = buildInitialValues(FIELDS);
 
-const validateFields = (values) => {
-  const nextErrors = {};
-
-  FIELDS.forEach((field) => {
-    const value = String(values[field.key] ?? "").trim();
-    if (field.required && !value) {
-      nextErrors[field.key] = `${field.label} is required.`;
-    }
-  });
-
-  return nextErrors;
-};
-
-export default function UserSignInScreen() {
+export default function SignInScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
-  const [submitState, setSubmitState] = useState("idle"); // idle | loading
+  const [submitState, setSubmitState] = useState("idle");
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
-
     setErrors((prev) => {
       if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];
       return next;
     });
+    if (submitState === "success") setSubmitState("idle");
   };
 
   const handleSubmit = async () => {
-    const nextErrors = validateFields(formValues);
-
+    const nextErrors = validateFieldSet({ fields: FIELDS, values: formValues });
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      setSubmitState("idle");
       return;
     }
 
-    setErrors({});
     setSubmitState("loading");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: formValues.email.trim(),
-      password: formValues.password,
-    });
+    const { identifier, password } = formValues;
 
-    if (error) {
-      setErrors({ password: error.message });
-      setSubmitState("idle");
-    } else {
-      setSubmitState("idle");
-      router.replace("/mode-select");
+    // Determine if identifier is an email or username
+    const isEmail = identifier.includes("@");
+    let email = identifier;
+
+    if (!isEmail) {
+      // Look up email by username in volunteers table
+      const { data, error } = await supabase
+        .from("volunteers")
+        .select("email")
+        .eq("username", identifier)
+        .single();
+
+      if (error || !data) {
+        setErrors({ general: "No account found with that username." });
+        setSubmitState("idle");
+        return;
+      }
+
+      email = data.email;
     }
+
+    // Sign in via Supabase auth
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({ email, password });
+
+    if (authError) {
+      setErrors({ general: "Invalid credentials. Please try again." });
+      setSubmitState("idle");
+      return;
+    }
+
+    console.log("Signed in successfully:", authData.user);
+    setErrors({});
+    setSubmitState("success");
   };
 
   return (
@@ -97,8 +109,22 @@ export default function UserSignInScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        {submitState === "success" ? (
+          <View style={styles.successBanner}>
+            <Text style={styles.successText}>
+              Signed in successfully! Welcome back.
+            </Text>
+          </View>
+        ) : null}
+
+        {errors.general ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{errors.general}</Text>
+          </View>
+        ) : null}
+
         <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to your account.</Text>
+        <Text style={styles.subtitle}>Sign in to your volunteer account.</Text>
 
         {FIELDS.map((field) => (
           <View key={field.key} style={styles.fieldWrapper}>
@@ -131,56 +157,3 @@ export default function UserSignInScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: theme.colors.mutedText,
-    marginBottom: 22,
-  },
-  fieldWrapper: {
-    marginBottom: 14,
-  },
-  label: {
-    color: theme.colors.labelText,
-    fontSize: 14,
-    marginBottom: 6,
-    fontWeight: "600",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    fontSize: 15,
-    color: theme.colors.text,
-  },
-  inputError: {
-    borderColor: theme.colors.danger,
-  },
-  errorText: {
-    marginTop: 6,
-    color: theme.colors.errorText,
-    fontSize: 13,
-  },
-  submitButton: {
-    marginTop: 12,
-  },
-});

@@ -3,21 +3,21 @@ import { router } from "expo-router";
 import AppButton from "../components/AppButton";
 import { theme } from "../theme";
 
-export default function ModeSelectScreen() {
+export default function VolunteerOptionsScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>How would you like to continue?</Text>
-      <Text style={styles.subtitle}>Choose your role for this session.</Text>
+      <Text style={styles.title}>Volunteer Portal</Text>
+      <Text style={styles.subtitle}>Are you a new or returning volunteer?</Text>
 
       <AppButton
-        title="Volunteer Mode"
-        onPress={() => router.push("/volunteer-options")}
+        title="New?"
+        onPress={() => router.push("/volunteer-signup")}
         style={styles.button}
       />
       <AppButton
-        title="Requester Mode"
+        title="Returning?"
         variant="secondary"
-        onPress={() => router.push("/requester")}
+        onPress={() => router.push("/volunteer-signin")}
         style={styles.button}
       />
     </View>

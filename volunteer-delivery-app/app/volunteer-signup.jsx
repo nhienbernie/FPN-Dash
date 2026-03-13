@@ -7,15 +7,16 @@ import {
   TextInput,
   View,
 } from "react-native";
-import AppButton from "../../components/AppButton";
-import { styles } from "../../styles/volunteerSignUpSignIn.styles";
+import AppButton from "../components/AppButton";
+import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import {
   buildInitialValues,
   digitsOnly,
   isValidEmail,
   isValidZip,
   validateFieldSet,
-} from "../../validators/volunteerValidators";
+} from "../validators/volunteerValidators";
+import { supabase } from "../lib/supabase";
 
 const FIELDS = [
   {
@@ -91,7 +92,6 @@ const FIELDS = [
   },
 ];
 
-// For the two stage sign-up flow
 const STEP_ONE_KEYS = ["firstName", "lastName", "phone", "email", "zip"];
 const STEP_TWO_KEYS = ["username", "password", "confirmPassword"];
 
@@ -104,24 +104,14 @@ export default function VolunteerSignupScreen() {
   const [step, setStep] = useState(1);
 
   const handleChange = (field, value) => {
-    setFormValues((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-
+    setFormValues((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => {
-      if (!prev[field]) {
-        return prev;
-      }
-
+      if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];
       return next;
     });
-
-    if (submitState === "success") {
-      setSubmitState("idle");
-    }
+    if (submitState === "success") setSubmitState("idle");
   };
 
   const handleNext = () => {
@@ -130,13 +120,11 @@ export default function VolunteerSignupScreen() {
       values: formValues,
       keys: STEP_ONE_KEYS,
     });
-
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       setSubmitState("idle");
       return;
     }
-
     setErrors({});
     setSubmitState("idle");
     setStep(2);
@@ -148,15 +136,48 @@ export default function VolunteerSignupScreen() {
     setStep(1);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextErrors = validateFieldSet({
       fields: FIELDS,
       values: formValues,
       keys: STEP_TWO_KEYS,
     });
-
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
+      setSubmitState("idle");
+      return;
+    }
+
+    setSubmitState("loading");
+
+    // 1. Create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: formValues.email,
+      password: formValues.password,
+    });
+
+    if (authError) {
+      setErrors({ general: authError.message });
+      setSubmitState("idle");
+      return;
+    }
+
+    const uid = authData.user?.id;
+
+    // 2. Insert into volunteers table
+    const { error: insertError } = await supabase.from("volunteers").insert({
+      uid,
+      first_name: formValues.firstName,
+      last_name: formValues.lastName,
+      phone_number: formValues.phone,
+      email: formValues.email,
+      zip: formValues.zip,
+      username: formValues.username,
+      is_volunteer: true,
+    });
+
+    if (insertError) {
+      setErrors({ general: insertError.message });
       setSubmitState("idle");
       return;
     }
@@ -167,7 +188,7 @@ export default function VolunteerSignupScreen() {
 
   const visibleKeys = step === 1 ? STEP_ONE_KEYS : STEP_TWO_KEYS;
   const visibleFields = FIELDS.filter((field) =>
-    visibleKeys.includes(field.key),
+    visibleKeys.includes(field.key)
   );
 
   return (
@@ -182,9 +203,14 @@ export default function VolunteerSignupScreen() {
         {submitState === "success" ? (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>
-              Volunteer sign-up details look good. You can continue to next
-              onboarding steps.
+              Account created! Welcome aboard.
             </Text>
+          </View>
+        ) : null}
+
+        {errors.general ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{errors.general}</Text>
           </View>
         ) : null}
 
@@ -232,8 +258,9 @@ export default function VolunteerSignupScreen() {
               style={[styles.actionButton, styles.backButton]}
             />
             <AppButton
-              title="Create Volunteer Account"
+              title={submitState === "loading" ? "Creating..." : "Create Volunteer Account"}
               onPress={handleSubmit}
+              disabled={submitState === "loading"}
               style={styles.actionButton}
             />
           </View>
