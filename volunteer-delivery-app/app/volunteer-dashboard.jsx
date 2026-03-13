@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "expo-router";
+import { useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -23,13 +24,32 @@ export default function VolunteerDashboard() {
   const router = useRouter();
 
   // fetch specific columns from Supabase orders table
+  /**
   const fetchOrders = async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from("orders")
-      .select(
-        "*"
-      );
+      .select("*")
+      .eq("status", "pending");
+    if (error) {
+      console.error("Error fetching orders:", error);
+    } else {
+      setOrders(data);
+    }
+    setLoading(false);
+  };
+  ***/
+
+  const fetchOrders = async () => {
+    setLoading(true);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .or(`status.eq.pending,volunteer_uid.eq.${user.id}`);
+
     if (error) {
       console.error("Error fetching orders:", error);
     } else {
@@ -67,19 +87,11 @@ export default function VolunteerDashboard() {
   };
 
   const renderItem = ({ item }) => {
-    // choose yellowish until accepted, then green
-    /**const backgroundColor =
-      item.status && item.status.toLowerCase() === "accepted"
-        ? theme.colors.successBg
-        : "#FEF3C7"; // light yellow
-    **/
-
     const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
-    const backgroundColor = isAccepted ? "#FD9A3A" : "#FEF3C7"; 
+    const backgroundColor = isAccepted ? "#FD9A3A" : "#FEF3C7";
 
     return (
-      <View style={[styles.orderItem, { backgroundColor }]}>        
-        {/* display name, creation time, and status in a row evenly spaced */}
+      <View style={[styles.orderItem, { backgroundColor }]}>
         <View style={styles.orderRow}>
           <Text style={styles.orderSubText}>{item.name}</Text>
           <Text style={styles.orderSubText}>
@@ -89,11 +101,10 @@ export default function VolunteerDashboard() {
           </Text>
           <Text style={styles.orderSubText}>{item.status}</Text>
         </View>
-        <AppButton 
+        <AppButton
           title={isAccepted ? "Accepted" : "Accept"}
-          disabled={isAccepted}
           variant={isAccepted ? "secondary" : "primary"}
-          onPress={() => !isAccepted && setSelectedOrder(item)}
+          onPress={() => setSelectedOrder(item)}
         />
       </View>
     );
@@ -140,13 +151,25 @@ export default function VolunteerDashboard() {
                 </Text>
               </>
             )}
+
             <AppButton
               title="Confirm order"
-              onPress={() => {
-                // close modal then navigate, passing order info as params
+              onPress={async () => {
+                const { data: { user } } = await supabase.auth.getUser();
+
+                const { error } = await supabase
+                  .from("orders")
+                  .update({ status: "awaiting delivery", volunteer_uid: user.id })
+                  .eq("order_id", selectedOrder.order_id);
+
+                if (error) {
+                  console.error("Error updating order:", error);
+                } else {
+                  fetchOrders();
+                }
+
                 handleClose();
                 if (selectedOrder) {
-                  // stringify the whole order so confirm screen can inspect any fields
                   router.push({
                     pathname: "/confirm-delivery",
                     params: {
@@ -160,6 +183,7 @@ export default function VolunteerDashboard() {
                 }
               }}
             />
+
             <AppButton
               title="Close"
               variant="secondary"
