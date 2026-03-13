@@ -27,7 +27,7 @@ export default function OrderFood() {
           setOrderStatus(order.status);
           setOrderPlaced(true);
         }
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors on load
       }
     };
@@ -50,7 +50,7 @@ export default function OrderFood() {
       // Fetch user data from customers table
       const { data: customer, error: fetchError } = await supabase
         .from("customers")
-        .select("uid, first_name, last_name, delivery_address")
+        .select("uid, first_name, last_name, address")
         .eq("uid", user.id)
         .single();
 
@@ -65,16 +65,15 @@ export default function OrderFood() {
         .from("orders")
         .insert({
           customer_uid: customer.uid,
-          first_name: customer.first_name,
-          last_name: customer.last_name,
-          delivery_address: customer.delivery_address,
+          name: customer.first_name,
+          delivery_address: customer.address,
           status: "pending",
         })
         .select()
         .single();
 
       if (insertError) {
-        if (insertError.code === '23505') { // UNIQUE violation
+        if (insertError.code === "23505") {
           Alert.alert("Error", "You already have an active order.");
         } else {
           Alert.alert("Error", "Failed to place order.");
@@ -88,7 +87,7 @@ export default function OrderFood() {
       setOrderStatus(order.status);
       setOrderPlaced(true);
       Alert.alert("Order Placed", "Your food order has been placed successfully!");
-    } catch (error) {
+    } catch (_error) {
       Alert.alert("Error", "An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -115,7 +114,7 @@ export default function OrderFood() {
       setOrderTime(null);
       setOrderStatus("pending");
       Alert.alert("Order Cancelled", "Your order has been cancelled.");
-    } catch (error) {
+    } catch (_error) {
       Alert.alert("Error", "An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -141,7 +140,7 @@ export default function OrderFood() {
       setOrderStatus(order.status);
       setOrderTime(new Date(order.created_at));
       Alert.alert("Order Refreshed", "Your order status has been updated.");
-    } catch (error) {
+    } catch (_error) {
       Alert.alert("Error", "An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -219,12 +218,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: 16,
     textAlign: "center",
-  },
-  loadingText: {
-    fontSize: 16,
-    color: theme.colors.primary,
-    textAlign: "center",
-    marginTop: 16,
   },
   loadingText: {
     fontSize: 16,
