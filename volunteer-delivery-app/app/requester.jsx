@@ -1,3 +1,6 @@
+import { useRouter } from "expo-router";
+import { supabase } from "../services/supabase";
+
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -9,9 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
 import AppButton from "../components/AppButton";
-import { supabase } from "../lib/supabase";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { theme } from "../theme";
 import { digitsOnly } from "../validators/volunteerValidators";
