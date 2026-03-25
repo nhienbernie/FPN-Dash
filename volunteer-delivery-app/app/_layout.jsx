@@ -9,6 +9,7 @@ export default function RootLayout() {
       <Stack.Screen name="volunteer-signup" options={{ title: "Volunteer Sign Up" }} />
       <Stack.Screen name="volunteer-signin" options={{ title: "Volunteer Sign In" }} />
       <Stack.Screen name="requester" options={{ title: "Request Food Assistance" }} />
+      <Stack.Screen name="order-food" options={{ headerShown: false }} />
     </Stack>
   );
 }

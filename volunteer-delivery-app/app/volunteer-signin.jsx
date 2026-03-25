@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
+
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,7 +15,7 @@ import {
   validateFieldSet,
 } from "../validators/volunteerValidators";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../services/supabase";
 
 const FIELDS = [
   {
@@ -40,6 +42,7 @@ export default function SignInScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [submitState, setSubmitState] = useState("idle");
+  const router = useRouter();
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -98,6 +101,7 @@ export default function SignInScreen() {
     console.log("Signed in successfully:", authData.user);
     setErrors({});
     setSubmitState("success");
+    router.replace("/volunteer-dashboard");
   };
 
   return (

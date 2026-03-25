@@ -1,6 +1,7 @@
 [
   {
     "phone": "5550000001",
+    "dob": "01/15/1970",
     "firstName": "Demo",
     "lastName": "UserOne",
     "address": {
@@ -12,7 +13,8 @@
     }
   },
   {
-    "phone": "5550000002",
+    "phone": "1234567890",
+    "dob": "01/01/2001",
     "firstName": "Testy",
     "lastName": "McTestFace",
     "address": {
@@ -25,6 +27,7 @@
   },
   {
     "phone": "5550000003",
+    "dob": "03/17/1974",
     "firstName": "Example",
     "lastName": "Person",
     "address": {
@@ -37,6 +40,7 @@
   },
   {
     "phone": "5550000004",
+    "dob": "04/18/1976",
     "firstName": "Sample",
     "lastName": "Data",
     "address": {
@@ -49,6 +53,7 @@
   },
   {
     "phone": "5550000005",
+    "dob": "05/19/1978",
     "firstName": "Placeholder",
     "lastName": "Record",
     "address": {
