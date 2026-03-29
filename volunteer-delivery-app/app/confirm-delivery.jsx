@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { theme } from "../theme";
+import { supabase } from "../services/supabase";
+import AppButton from "../components/AppButton";
 
 export default function ConfirmDelivery() {
   const router = useRouter();
   const { name = "", address = "", order } = useLocalSearchParams();
+  const [modalVisible, setModalVisible] = useState(false);
 
   // attempt to pull a date field from the passed order (created_at or delivery_date)
   const [displayDate] = useState(() => {
@@ -29,6 +32,26 @@ export default function ConfirmDelivery() {
     Linking.openURL(mapsUrl).catch((err) => console.error("Failed to open maps", err));
   };
 
+  const handleConfirmDelivery = async () => {
+    if (order) {
+      try {
+        const o = JSON.parse(order);
+        const { error } = await supabase
+          .from("orders")
+          .update({ status: "delivered" })
+          .eq("order_id", o.order_id);
+        if (error) {
+          console.error("Error updating order:", error);
+        } else {
+          setModalVisible(false);
+          router.push("/volunteer-dashboard");
+        }
+      } catch (e) {
+        console.error("Error parsing order:", e);
+      }
+    }
+  };
+
   // geocode address when it changes, using our internal API route
 
   return (
@@ -41,6 +64,11 @@ export default function ConfirmDelivery() {
         <TouchableOpacity onPress={openMaps}>
           <Text style={styles.addressText}>{address || "Delivery address"}</Text>
         </TouchableOpacity>
+        <AppButton
+          title="Confirm Delivery"
+          onPress={() => setModalVisible(true)}
+          style={{ marginTop: theme.spacing.md }}
+        />
         <TouchableOpacity
           style={{ marginTop: theme.spacing.md }}
           onPress={() => router.push("/volunteer-dashboard")}
@@ -48,6 +76,31 @@ export default function ConfirmDelivery() {
           <Text style={styles.backText}>Back to dashboard</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalText}>Are you sure you want to confirm this delivery?</Text>
+            <View style={styles.modalButtons}>
+              <AppButton
+                title="Yes"
+                onPress={handleConfirmDelivery}
+                style={{ marginRight: theme.spacing.sm }}
+              />
+              <AppButton
+                title="No"
+                variant="secondary"
+                onPress={() => setModalVisible(false)}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -87,5 +140,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.secondary,
     textAlign: "center",
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalContent: {
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.lg,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalText: {
+    fontSize: 18,
+    color: theme.colors.text,
+    textAlign: "center",
+    marginBottom: theme.spacing.md,
+  },
+  modalButtons: {
+    flexDirection: "row",
   },
 });

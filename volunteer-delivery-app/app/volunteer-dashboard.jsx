@@ -53,7 +53,12 @@ export default function VolunteerDashboard() {
     if (error) {
       console.error("Error fetching orders:", error);
     } else {
-      setOrders(data);
+      // Sort orders: pending first, then awaiting delivery, then delivered
+      const sortedData = data.sort((a, b) => {
+        const statusOrder = { pending: 1, "awaiting delivery": 2, delivered: 3 };
+        return statusOrder[a.status] - statusOrder[b.status];
+      });
+      setOrders(sortedData);
     }
     setLoading(false);
   };
@@ -88,7 +93,9 @@ export default function VolunteerDashboard() {
 
   const renderItem = ({ item }) => {
     const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
-    const backgroundColor = isAccepted ? "#FD9A3A" : "#FEF3C7";
+    const isUrgent = item.status === "pending" && item.created_at && (new Date() - new Date(item.created_at)) > 2 * 60 * 60 * 1000;
+    const isDelivered = item.status === "delivered";
+    const backgroundColor = isAccepted ? "#FD9A3A" : isUrgent ? "red" : isDelivered ? "#90EE90" : "#FEF3C7";
 
     return (
       <View style={[styles.orderItem, { backgroundColor }]}>
@@ -99,13 +106,17 @@ export default function VolunteerDashboard() {
               ? new Date(item.created_at).toLocaleString()
               : ""}
           </Text>
-          <Text style={styles.orderSubText}>{item.status}</Text>
+          <Text style={styles.orderSubText}>
+            {isUrgent ? "pending: urgent" : item.status}
+          </Text>
         </View>
-        <AppButton
-          title={isAccepted ? "Accepted" : "Accept"}
-          variant={isAccepted ? "secondary" : "primary"}
-          onPress={() => setSelectedOrder(item)}
-        />
+        {!isDelivered && (
+          <AppButton
+            title={isAccepted ? "Accepted" : "Accept"}
+            variant={isAccepted ? "secondary" : "primary"}
+            onPress={() => setSelectedOrder(item)}
+          />
+        )}
       </View>
     );
   };
