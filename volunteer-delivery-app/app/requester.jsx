@@ -224,8 +224,8 @@ export default function RequesterScreen() {
             <Text style={modalStyles.title}>Disclaimer</Text>
             <Text style={modalStyles.body}>
               The information you provide is used solely to verify your
-              eligibility for food assistance. All data is kept confidential
-              and will not be shared with third parties.
+              eligibility for food assistance. All data is kept confidential and
+              will not be shared with third parties.
             </Text>
             <AppButton
               title="I Understand"
@@ -291,7 +291,7 @@ export default function RequesterScreen() {
                   value={verificationCode}
                   onChangeText={(text) => {
                     setVerificationCode(
-                      digitsOnly(text).slice(0, DEMO_CODE_LENGTH)
+                      digitsOnly(text).slice(0, DEMO_CODE_LENGTH),
                     );
                     clearGeneralErrors();
                   }}
@@ -299,10 +299,7 @@ export default function RequesterScreen() {
                   keyboardType="number-pad"
                   autoCapitalize="none"
                   editable={submitState === "idle"}
-                  style={[
-                    styles.input,
-                    errors.code ? styles.inputError : null,
-                  ]}
+                  style={[styles.input, errors.code ? styles.inputError : null]}
                 />
                 {errors.code ? (
                   <Text style={styles.errorText}>{errors.code}</Text>
@@ -311,14 +308,18 @@ export default function RequesterScreen() {
 
               <View style={styles.stepTwoActions}>
                 <AppButton
-                  title={submitState === "sending" ? "Sending..." : "Send Again"}
+                  title={
+                    submitState === "sending" ? "Sending..." : "Send Again"
+                  }
                   variant="secondary"
                   onPress={handleSendCode}
                   disabled={submitState !== "idle"}
                   style={[styles.actionButton, styles.backButton]}
                 />
                 <AppButton
-                  title={submitState === "verifying" ? "Verifying..." : "Verify"}
+                  title={
+                    submitState === "verifying" ? "Verifying..." : "Verify"
+                  }
                   onPress={handleVerifyAndContinue}
                   disabled={submitState !== "idle"}
                   style={styles.actionButton}
