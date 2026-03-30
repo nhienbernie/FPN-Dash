@@ -160,6 +160,18 @@ export default function VolunteerDashboard() {
                 <Text style={styles.detailText}>
                   Address: {selectedOrder.delivery_address}
                 </Text>
+                <Text style={styles.detailText}>
+                  Item Milk: {selectedOrder.item_milk ? "Yes" : "No"}
+                </Text>
+                <Text style={styles.detailText}>
+                  Item PB: {selectedOrder.item_pb ? "Yes" : "No"}
+                </Text>
+                <Text style={styles.detailText}>
+                  Item Mac & Cheese: {selectedOrder.item_mac_cheese ? "Yes" : "No"}
+                </Text>
+                <Text style={styles.detailText}>
+                  Notes: {selectedOrder.notes || "None"}
+                </Text>
               </>
             )}
 
@@ -251,12 +263,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.3)",
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   modalContent: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
     padding: theme.spacing.lg,
+    width: '90%',
+
   },
   detailText: {
     fontSize: 16,

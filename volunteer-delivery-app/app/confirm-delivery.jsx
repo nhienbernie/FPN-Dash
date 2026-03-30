@@ -24,6 +24,17 @@ export default function ConfirmDelivery() {
     return "";
   });
 
+  const [orderDetails] = useState(() => {
+    if (order) {
+      try {
+        return JSON.parse(order);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     address
   )}`;
@@ -64,6 +75,18 @@ export default function ConfirmDelivery() {
         <TouchableOpacity onPress={openMaps}>
           <Text style={styles.addressText}>{address || "Delivery address"}</Text>
         </TouchableOpacity>
+        <Text style={styles.detailText}>
+          Item Milk: {orderDetails.item_milk ? "Yes" : "No"}
+        </Text>
+        <Text style={styles.detailText}>
+          Item PB: {orderDetails.item_pb ? "Yes" : "No"}
+        </Text>
+        <Text style={styles.detailText}>
+          Item Mac & Cheese: {orderDetails.item_mac_cheese ? "Yes" : "No"}
+        </Text>
+        <Text style={styles.detailText}>
+          Notes: {orderDetails.notes || "None"}
+        </Text>
         <AppButton
           title="Confirm Delivery"
           onPress={() => setModalVisible(true)}
@@ -134,6 +157,12 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     textAlign: "center",
     textDecorationLine: "underline",
+    marginBottom: theme.spacing.sm,
+  },
+  detailText: {
+    fontSize: 20,
+    color: theme.colors.text,
+    textAlign: "center",
     marginBottom: theme.spacing.sm,
   },
   backText: {
