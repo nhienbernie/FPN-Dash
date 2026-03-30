@@ -10,6 +10,7 @@ export default function ConfirmDelivery() {
   const router = useRouter();
   const { name = "", address = "", order } = useLocalSearchParams();
   const [modalVisible, setModalVisible] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
 
   // attempt to pull a date field from the passed order (created_at or delivery_date)
   const [displayDate] = useState(() => {
@@ -63,6 +64,26 @@ export default function ConfirmDelivery() {
     }
   };
 
+  const handleCancelDelivery = async () => {
+    if (order) {
+      try {
+        const o = JSON.parse(order);
+        const { error } = await supabase
+          .from("orders")
+          .update({ status: "pending", volunteer_uid: null })
+          .eq("order_id", o.order_id);
+        if (error) {
+          console.error("Error updating order:", error);
+        } else {
+          setCancelModalVisible(false);
+          router.push("/volunteer-dashboard");
+        }
+      } catch (e) {
+        console.error("Error parsing order:", e);
+      }
+    }
+  };
+
   // geocode address when it changes, using our internal API route
 
   return (
@@ -92,6 +113,12 @@ export default function ConfirmDelivery() {
           onPress={() => setModalVisible(true)}
           style={{ marginTop: theme.spacing.md }}
         />
+        <AppButton
+          title="Cancel Delivery"
+          onPress={() => setCancelModalVisible(true)}
+          variant="secondary"
+          style={{ marginTop: theme.spacing.md }}
+        />
         <TouchableOpacity
           style={{ marginTop: theme.spacing.md }}
           onPress={() => router.push("/volunteer-dashboard")}
@@ -119,6 +146,31 @@ export default function ConfirmDelivery() {
                 title="No"
                 variant="secondary"
                 onPress={() => setModalVisible(false)}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={cancelModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCancelModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalText}>Are you sure you want to cancel this delivery?</Text>
+            <View style={styles.modalButtons}>
+              <AppButton
+                title="Yes"
+                onPress={handleCancelDelivery}
+                style={{ marginRight: theme.spacing.sm }}
+              />
+              <AppButton
+                title="No"
+                variant="secondary"
+                onPress={() => setCancelModalVisible(false)}
               />
             </View>
           </View>
