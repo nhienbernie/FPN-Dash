@@ -5,18 +5,6 @@ import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
-const ITEM_LABELS = {
-  item_meat: "Meat",
-  item_plant_protein: "Plant Protein",
-  item_milk: "Milk",
-  item_oj: "O.J.",
-  diet_kosher: "Kosher",
-  diet_vegan: "Vegan",
-  diet_vegetarian: "Vegetarian",
-  diet_pescatarian: "Pescatarian",
-  diet_gluten_free: "Gluten Free",
-};
-
 export default function OrderStatus() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,7 +17,7 @@ export default function OrderStatus() {
 
       const { data, error } = await supabase
         .from("orders")
-        .select("order_id, status, created_at, notes, order_items(item_key)")
+        .select("order_id, status, created_at, notes, order_items(item_id, items(label))")
         .eq("customer_uid", user.id)
         .single();
 
@@ -91,7 +79,8 @@ export default function OrderStatus() {
   }
 
   const selectedItems = (order.order_items ?? [])
-    .map((r) => ITEM_LABELS[r.item_key] ?? r.item_key);
+    .map((r) => r.items?.label)
+    .filter(Boolean);
 
   return (
     <View style={styles.container}>

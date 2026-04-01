@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -13,42 +13,49 @@ import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
-const CATEGORIES = [
-  {
-    label: "Protein",
-    items: [
-      { key: "item_meat", label: "Meat" },
-      { key: "item_plant_protein", label: "Plant" },
-    ],
-  },
-  {
-    label: "Drink",
-    items: [
-      { key: "item_milk", label: "Milk" },
-      { key: "item_oj", label: "O.J." },
-    ],
-  },
-  {
-    label: "Diet Restrictions",
-    subtitle: "Please put in description if not listed",
-    items: [
-      { key: "diet_kosher", label: "Kosher" },
-      { key: "diet_vegan", label: "Vegan" },
-      { key: "diet_vegetarian", label: "Vegetarian" },
-      { key: "diet_pescatarian", label: "Pescatarian" },
-      { key: "diet_gluten_free", label: "Gluten Free" },
-    ],
-  },
-];
+const CATEGORY_SUBTITLES = {
+  "Diet Restrictions": "Please put in description if not listed",
+};
 
 export default function OrderItems() {
+  const [categories, setCategories] = useState([]);
   const [selected, setSelected] = useState([]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
 
-  const toggleItem = (key) => {
+  useEffect(() => {
+    const fetchItems = async () => {
+      const { data, error } = await supabase
+        .from("items")
+        .select("id, key, label, category")
+        .eq("active", true)
+        .order("category");
+
+      if (error || !data) {
+        Alert.alert("Error", "Failed to load items.");
+        setInitializing(false);
+        return;
+      }
+
+      const grouped = data.reduce((acc, item) => {
+        if (!acc[item.category]) acc[item.category] = [];
+        acc[item.category].push(item);
+        return acc;
+      }, {});
+
+      setCategories(
+        Object.entries(grouped).map(([label, items]) => ({ label, items }))
+      );
+      setInitializing(false);
+    };
+
+    fetchItems();
+  }, []);
+
+  const toggleItem = (id) => {
     setSelected((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
 
@@ -94,9 +101,9 @@ export default function OrderItems() {
       }
 
       if (selected.length > 0) {
-        const rows = selected.map((item_key) => ({
+        const rows = selected.map((item_id) => ({
           order_id: newOrder.order_id,
-          item_key,
+          item_id,
         }));
         const { error: itemsError } = await supabase
           .from("order_items")
@@ -115,28 +122,38 @@ export default function OrderItems() {
     }
   };
 
+  if (initializing) {
+    return (
+      <View style={styles.centered}>
+        <Text style={{ color: theme.colors.mutedText }}>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Select Items</Text>
       <Text style={styles.subtitle}>Choose what you'd like in your order</Text>
 
-      {CATEGORIES.map(({ label, subtitle, items }) => (
+      {categories.map(({ label, items }) => (
         <View key={label} style={styles.categoryBlock}>
           <View style={styles.categoryHeader}>
             <Text style={styles.categoryLabel}>{label}</Text>
-            {subtitle && (
-              <Text style={styles.categorySubtitle}>{subtitle}</Text>
+            {CATEGORY_SUBTITLES[label] && (
+              <Text style={styles.categorySubtitle}>
+                {CATEGORY_SUBTITLES[label]}
+              </Text>
             )}
           </View>
-          {items.map(({ key, label: itemLabel }) => (
+          {items.map(({ id, label: itemLabel }) => (
             <TouchableOpacity
-              key={key}
+              key={id}
               style={styles.checkboxRow}
-              onPress={() => toggleItem(key)}
+              onPress={() => toggleItem(id)}
               activeOpacity={0.7}
             >
-              <View style={[styles.checkbox, selected.includes(key) && styles.checkboxChecked]}>
-                {selected.includes(key) && <Text style={styles.checkmark}>✓</Text>}
+              <View style={[styles.checkbox, selected.includes(id) && styles.checkboxChecked]}>
+                {selected.includes(id) && <Text style={styles.checkmark}>✓</Text>}
               </View>
               <Text style={styles.checkboxLabel}>{itemLabel}</Text>
             </TouchableOpacity>
@@ -168,6 +185,12 @@ export default function OrderItems() {
 }
 
 const styles = StyleSheet.create({
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.background,
+  },
   container: {
     flexGrow: 1,
     paddingHorizontal: 24,
