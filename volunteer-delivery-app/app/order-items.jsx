@@ -38,11 +38,13 @@ export default function OrderItems() {
         return;
       }
 
-      const grouped = data.reduce((acc, item) => {
-        if (!acc[item.category]) acc[item.category] = [];
-        acc[item.category].push(item);
-        return acc;
-      }, {});
+      const grouped = {};
+      for (const item of data) {
+        if (!grouped[item.category]) {
+          grouped[item.category] = [];
+        }
+        grouped[item.category].push(item);
+      }
 
       setCategories(
         Object.entries(grouped).map(([label, items]) => ({ label, items }))
