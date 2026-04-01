@@ -13,23 +13,43 @@ import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
-const ITEMS = [
-  { key: "item_milk", label: "Milk" },
-  { key: "item_pb", label: "Peanut Butter" },
-  { key: "item_mac_cheese", label: "Mac & Cheese" },
+const CATEGORIES = [
+  {
+    label: "Protein",
+    items: [
+      { key: "item_meat", label: "Meat" },
+      { key: "item_plant_protein", label: "Plant" },
+    ],
+  },
+  {
+    label: "Drink",
+    items: [
+      { key: "item_milk", label: "Milk" },
+      { key: "item_oj", label: "O.J." },
+    ],
+  },
+  {
+    label: "Diet Restrictions",
+    subtitle: "Please put in description if not listed",
+    items: [
+      { key: "diet_kosher", label: "Kosher" },
+      { key: "diet_vegan", label: "Vegan" },
+      { key: "diet_vegetarian", label: "Vegetarian" },
+      { key: "diet_pescatarian", label: "Pescatarian" },
+      { key: "diet_gluten_free", label: "Gluten Free" },
+    ],
+  },
 ];
 
 export default function OrderItems() {
-  const [selected, setSelected] = useState({
-    item_milk: false,
-    item_pb: false,
-    item_mac_cheese: false,
-  });
+  const [selected, setSelected] = useState([]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
 
   const toggleItem = (key) => {
-    setSelected((prev) => ({ ...prev, [key]: !prev[key] }));
+    setSelected((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
   };
 
   const handlePlaceOrder = async () => {
@@ -52,14 +72,17 @@ export default function OrderItems() {
         return;
       }
 
-      const { error: insertError } = await supabase.from("orders").insert({
-        customer_uid: customer.uid,
-        name: customer.first_name,
-        delivery_address: customer.address,
-        status: "pending",
-        notes: notes.trim() || null,
-        ...selected,
-      });
+      const { data: newOrder, error: insertError } = await supabase
+        .from("orders")
+        .insert({
+          customer_uid: customer.uid,
+          name: customer.first_name,
+          delivery_address: customer.address,
+          status: "pending",
+          notes: notes.trim() || null,
+        })
+        .select("order_id")
+        .single();
 
       if (insertError) {
         if (insertError.code === "23505") {
@@ -68,6 +91,20 @@ export default function OrderItems() {
           Alert.alert("Error", "Failed to place order.");
         }
         return;
+      }
+
+      if (selected.length > 0) {
+        const rows = selected.map((item_key) => ({
+          order_id: newOrder.order_id,
+          item_key,
+        }));
+        const { error: itemsError } = await supabase
+          .from("order_items")
+          .insert(rows);
+        if (itemsError) {
+          Alert.alert("Error", "Failed to save selected items.");
+          return;
+        }
       }
 
       router.replace("/order-status");
@@ -83,21 +120,29 @@ export default function OrderItems() {
       <Text style={styles.title}>Select Items</Text>
       <Text style={styles.subtitle}>Choose what you'd like in your order</Text>
 
-      <View style={styles.section}>
-        {ITEMS.map(({ key, label }) => (
-          <TouchableOpacity
-            key={key}
-            style={styles.checkboxRow}
-            onPress={() => toggleItem(key)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.checkbox, selected[key] && styles.checkboxChecked]}>
-              {selected[key] && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>{label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {CATEGORIES.map(({ label, subtitle, items }) => (
+        <View key={label} style={styles.categoryBlock}>
+          <View style={styles.categoryHeader}>
+            <Text style={styles.categoryLabel}>{label}</Text>
+            {subtitle && (
+              <Text style={styles.categorySubtitle}>{subtitle}</Text>
+            )}
+          </View>
+          {items.map(({ key, label: itemLabel }) => (
+            <TouchableOpacity
+              key={key}
+              style={styles.checkboxRow}
+              onPress={() => toggleItem(key)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, selected.includes(key) && styles.checkboxChecked]}>
+                {selected.includes(key) && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.checkboxLabel}>{itemLabel}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
 
       <Text style={styles.sectionTitle}>Special Instructions</Text>
       <TextInput
@@ -140,8 +185,23 @@ const styles = StyleSheet.create({
     color: theme.colors.mutedText,
     marginBottom: 28,
   },
-  section: {
+  categoryBlock: {
     marginBottom: 28,
+  },
+  categoryHeader: {
+    marginBottom: 8,
+  },
+  categoryLabel: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: theme.colors.primary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  categorySubtitle: {
+    fontSize: 13,
+    color: theme.colors.mutedText,
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: 18,
