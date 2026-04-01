@@ -61,6 +61,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   title: {
     fontSize: 28,
@@ -68,6 +71,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: 8,
     textAlign: "center",
+    marginTop: 50
   },
   subtitle: {
     fontSize: 16,

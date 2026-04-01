@@ -6,8 +6,8 @@ import { theme } from "../theme";
 export default function ModeSelectScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>How would you like to continue?</Text>
-      <Text style={styles.subtitle}>Choose your role for this session.</Text>
+      <Text style={styles.title}>Welcome!</Text>
+      <Text style={styles.subtitle}>FPN Delivery App Serving Licking County</Text>
 
       <AppButton
         title="Volunteer Mode"
@@ -31,6 +31,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   title: {
     fontSize: 28,
@@ -38,6 +41,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: 8,
     textAlign: "center",
+    marginTop: 50
   },
   subtitle: {
     fontSize: 16,

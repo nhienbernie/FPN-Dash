@@ -79,7 +79,8 @@ export default function OrderItems() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.outerContainer}>
+      <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Select Items</Text>
       <Text style={styles.subtitle}>Choose what you'd like in your order</Text>
 
@@ -119,10 +120,17 @@ export default function OrderItems() {
       />
       {loading && <Text style={styles.loadingText}>Placing order...</Text>}
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outerContainer: {
+    flex: 1,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
+  },
   container: {
     flexGrow: 1,
     paddingHorizontal: 24,
@@ -134,6 +142,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.colors.text,
     marginBottom: 8,
+    marginTop: 50
   },
   subtitle: {
     fontSize: 16,

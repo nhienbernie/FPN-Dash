@@ -185,11 +185,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   infoContainer: {
     padding: theme.spacing.lg,
     justifyContent: "center",
     backgroundColor: theme.colors.background,
+    marginTop: 50
   },
   nameText: {
     fontSize: 28,

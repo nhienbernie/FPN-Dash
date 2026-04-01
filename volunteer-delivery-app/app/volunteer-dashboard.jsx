@@ -95,7 +95,7 @@ export default function VolunteerDashboard() {
     const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
     const isUrgent = item.status === "pending" && item.created_at && (new Date() - new Date(item.created_at)) > 2 * 60 * 60 * 1000;
     const isDelivered = item.status === "delivered";
-    const backgroundColor = isAccepted ? "#FD9A3A" : isUrgent ? "red" : isDelivered ? "#90EE90" : "#FEF3C7";
+    const backgroundColor = isAccepted ? "#FD9A3A" : isUrgent ? "#ff572d" : isDelivered ? "#90EE90" : "#FEF3C7";
 
     return (
       <View style={[styles.orderItem, { backgroundColor }]}>
@@ -114,6 +114,8 @@ export default function VolunteerDashboard() {
           <AppButton
             title={isAccepted ? "Accepted" : "Accept"}
             variant={isAccepted ? "secondary" : "primary"}
+            style={{ backgroundColor: 'black' }}  // Custom background color
+            textStyle={{ color: 'white' }}      // Custom text color
             onPress={() => setSelectedOrder(item)}
           />
         )}
@@ -226,6 +228,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   title: {
     fontSize: 24,
@@ -233,6 +238,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
     textAlign: "center",
+    marginTop: 50
   },
   orderItem: {
     padding: theme.spacing.md,
