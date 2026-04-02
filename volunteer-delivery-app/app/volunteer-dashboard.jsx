@@ -23,23 +23,6 @@ export default function VolunteerDashboard() {
   const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
   const router = useRouter();
 
-  // fetch specific columns from Supabase orders table
-  /**
-  const fetchOrders = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("status", "pending");
-    if (error) {
-      console.error("Error fetching orders:", error);
-    } else {
-      setOrders(data);
-    }
-    setLoading(false);
-  };
-  ***/
-
   const fetchOrders = async () => {
     setLoading(true);
     
