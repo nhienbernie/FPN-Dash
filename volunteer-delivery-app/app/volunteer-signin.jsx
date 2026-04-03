@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -13,6 +14,7 @@ import {
   validateFieldSet,
 } from "../validators/volunteerValidators";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
+import { supabase } from "../lib/supabase";
 
 const FIELDS = [
   {
@@ -39,37 +41,64 @@ export default function SignInScreen() {
   const [formValues, setFormValues] = useState(INITIAL_VALUES);
   const [errors, setErrors] = useState({});
   const [submitState, setSubmitState] = useState("idle");
+  const router = useRouter();
 
   const handleChange = (field, value) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
-
     setErrors((prev) => {
       if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];
       return next;
     });
-
-    if (submitState === "success") {
-      setSubmitState("idle");
-    }
+    if (submitState === "success") setSubmitState("idle");
   };
 
-  const handleSubmit = () => {
-    const nextErrors = validateFieldSet({
-      fields: FIELDS,
-      values: formValues,
-    });
-
+  const handleSubmit = async () => {
+    const nextErrors = validateFieldSet({ fields: FIELDS, values: formValues });
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors);
       setSubmitState("idle");
       return;
     }
 
+    setSubmitState("loading");
+
+    const { identifier, password } = formValues;
+    const isEmail = identifier.includes("@");
+    let email = identifier;
+
+    if (!isEmail) {
+      // Look up email by username in volunteers table
+      const { data, error } = await supabase
+        .from("volunteers")
+        .select("email")
+        .eq("username", identifier)
+        .single();
+
+      if (error || !data) {
+        setErrors({ general: "No account found with that username." });
+        setSubmitState("idle");
+        return;
+      }
+
+      email = data.email;
+    }
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) {
+      setErrors({ general: "Invalid credentials. Please try again." });
+      setSubmitState("idle");
+      return;
+    }
+
     setErrors({});
     setSubmitState("success");
-    // TODO: replace with real auth logic
+    router.replace("/volunteer-dashboard");
   };
 
   return (
@@ -84,8 +113,14 @@ export default function SignInScreen() {
         {submitState === "success" ? (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>
-              Sign-in details look good. Continuing to your account...
+              Signed in successfully! Welcome back.
             </Text>
+          </View>
+        ) : null}
+
+        {errors.general ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{errors.general}</Text>
           </View>
         ) : null}
 
@@ -114,8 +149,9 @@ export default function SignInScreen() {
         ))}
 
         <AppButton
-          title="Sign In"
+          title={submitState === "loading" ? "Signing in..." : "Sign In"}
           onPress={handleSubmit}
+          disabled={submitState === "loading"}
           style={styles.submitButton}
         />
       </ScrollView>
