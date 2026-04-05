@@ -65,13 +65,6 @@ const FIELDS = [
       isValidZip(value) ? null : "ZIP code must be 5 digits.",
   },
   {
-    key: "username",
-    label: "Username",
-    placeholder: "Create a username",
-    required: true,
-    autoCapitalize: "none",
-  },
-  {
     key: "password",
     label: "Password",
     placeholder: "Create a password",
@@ -95,7 +88,7 @@ const FIELDS = [
 
 // For the two stage sign-up flow
 const STEP_ONE_KEYS = ["firstName", "lastName", "phone", "email", "zip"];
-const STEP_TWO_KEYS = ["username", "password", "confirmPassword"];
+const STEP_TWO_KEYS = ["password", "confirmPassword"];
 
 const INITIAL_VALUES = buildInitialValues(FIELDS);
 
@@ -163,37 +156,40 @@ export default function VolunteerSignupScreen() {
       return;
     }
 
-     try {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: formValues.email,
-      password: formValues.password,
-    });
+    setSubmitState("loading");
 
-    if (authError) {
-      setErrors({ email: authError.message });
-      setSubmitState("idle");
-      return;
-    }
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formValues.email,
+        password: formValues.password,
+      });
 
-    const { error: profileError } = await supabase.from("volunteers").insert({
-      uid: authData.user.id,
-      first_name: formValues.firstName,
-      last_name: formValues.lastName,
-      phone_number: formValues.phone,
-      email: formValues.email,
-      zip: formValues.zip,
-      username: formValues.username,
-    });
+      if (authError) {
+        setErrors({ email: authError.message });
+        setSubmitState("idle");
+        return;
+      }
 
-    if (profileError) {
-      setErrors({ username: profileError.message });
-      setSubmitState("idle");
-      return;
-    }
+      const { error: profileError } = await supabase.from("volunteers").insert({
+        uid: authData.user.id,
+        first_name: formValues.firstName,
+        last_name: formValues.lastName,
+        phone_number: formValues.phone,
+        email: formValues.email,
+        zip: formValues.zip,
+      });
 
-    setSubmitState("success");
-    router.replace("/volunteer-dashboard");
-    } catch (err) {
+      if (profileError) {
+        setErrors({
+          general: profileError.message || "Unable to create volunteer profile.",
+        });
+        setSubmitState("idle");
+        return;
+      }
+
+      setSubmitState("success");
+      router.replace("/volunteer-dashboard");
+    } catch (_error) {
       setErrors({ email: "Something went wrong. Please try again." });
       setSubmitState("idle");
     }
@@ -213,6 +209,12 @@ export default function VolunteerSignupScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
+        {errors.general ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{errors.general}</Text>
+          </View>
+        ) : null}
+
         {submitState === "success" ? (
           <View style={styles.successBanner}>
             <Text style={styles.successText}>
@@ -227,7 +229,7 @@ export default function VolunteerSignupScreen() {
         <Text style={styles.stepHint}>
           {step === 1
             ? "Enter your details to continue."
-            : "Create your volunteer account credentials."}
+            : "Create your password to finish setting up your volunteer account."}
         </Text>
 
         {visibleFields.map((field) => (
@@ -266,8 +268,13 @@ export default function VolunteerSignupScreen() {
               style={[styles.actionButton, styles.backButton]}
             />
             <AppButton
-              title="Create Volunteer Account"
+              title={
+                submitState === "loading"
+                  ? "Creating Account..."
+                  : "Create Volunteer Account"
+              }
               onPress={handleSubmit}
+              disabled={submitState === "loading"}
               style={styles.actionButton}
             />
           </View>

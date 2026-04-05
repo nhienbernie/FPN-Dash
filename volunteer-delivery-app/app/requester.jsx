@@ -21,6 +21,23 @@ const DEMO_API_BASE_URL =
   process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
 const DEMO_CODE_LENGTH = 6;
 
+// To automatically format input as the user types their DOB
+const DOB_DIGIT_LENGTH = 8;
+
+const formatDobInput = (value = "") => {
+  const digits = digitsOnly(value).slice(0, DOB_DIGIT_LENGTH);
+
+  if (digits.length <= 2) {
+    return digits;
+  }
+
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+};
+
 const FIELDS = [
   {
     key: "phone",
@@ -38,7 +55,7 @@ const FIELDS = [
     label: "Date of Birth",
     placeholder: "MM/DD/YYYY",
     required: true,
-    keyboardType: "default",
+    keyboardType: "number-pad",
     validate: (value) => {
       const trimmed = String(value).trim();
       if (!/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
@@ -80,7 +97,9 @@ export default function RequesterScreen() {
   };
 
   const handleChange = (field, value) => {
-    setFormValues((prev) => ({ ...prev, [field]: value }));
+    const nextValue = field === "dob" ? formatDobInput(value) : value;
+
+    setFormValues((prev) => ({ ...prev, [field]: nextValue }));
     setErrors((prev) => {
       const next = { ...prev };
       delete next[field];
@@ -270,6 +289,7 @@ export default function RequesterScreen() {
                 onChangeText={(text) => handleChange(field.key, text)}
                 placeholder={field.placeholder}
                 keyboardType={field.keyboardType}
+                maxLength={field.key === "dob" ? 10 : undefined}
                 autoCapitalize="none"
                 editable={submitState === "idle"}
                 style={[
