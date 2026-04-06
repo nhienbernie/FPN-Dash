@@ -1,19 +1,17 @@
-import { useState, useEffect, useRef } from "react";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  StyleSheet,
-  Text,
-  View,
-  FlatList,
-  Modal,
-  TouchableOpacity,
   Animated,
   Dimensions,
+  FlatList,
+  Modal,
+  StyleSheet,
+  Text,
+  View
 } from "react-native";
+import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
-import AppButton from "../components/AppButton";
 
 export default function VolunteerDashboard() {
   const [orders, setOrders] = useState([]);
@@ -22,6 +20,16 @@ export default function VolunteerDashboard() {
   const [modalVisible, setModalVisible] = useState(false);
   const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
   const router = useRouter();
+
+  const timeAgo = (date) => {
+    if (!date) return '';
+    const now = new Date();
+    const diff = now - new Date(date);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours > 0) return `${hours} hours ago`;
+    const minutes = Math.floor(diff / (1000 * 60));
+    return `${minutes} minutes ago`;
+  };
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -82,17 +90,17 @@ export default function VolunteerDashboard() {
 
     return (
       <View style={[styles.orderItem, { backgroundColor }]}>
-        <View style={styles.orderRow}>
-          <Text style={styles.orderSubText}>{item.name}</Text>
-          <Text style={styles.orderSubText}>
+        <View style={styles.topRow}>
+          <Text style={styles.orderName}>{item.name}</Text>
+          <Text style={[styles.timestamp, isUrgent && { color: '#000000' }]}>
             {item.created_at
-              ? new Date(item.created_at).toLocaleString()
+              ? timeAgo(item.created_at)
               : ""}
           </Text>
-          <Text style={styles.orderSubText}>
-            {isUrgent ? "pending: urgent" : item.status}
-          </Text>
         </View>
+        <Text style={[styles.status, isUrgent && { color: '#000000', fontWeight: 'bold' }]}>
+          {isUrgent ? "Status: Urgent" : item.status}
+        </Text>
         {!isDelivered && (
           <AppButton
             title={isAccepted ? "Accepted" : "Accept"}
@@ -151,9 +159,11 @@ export default function VolunteerDashboard() {
                 <Text style={styles.detailText}>
                   Item PB: {selectedOrder.item_pb ? "Yes" : "No"}
                 </Text>
+                {
                 <Text style={styles.detailText}>
                   Item Mac & Cheese: {selectedOrder.item_mac_cheese ? "Yes" : "No"}
                 </Text>
+                }
                 <Text style={styles.detailText}>
                   Notes: {selectedOrder.notes || "None"}
                 </Text>
@@ -224,24 +234,39 @@ const styles = StyleSheet.create({
     marginTop: 50
   },
   orderItem: {
-    padding: theme.spacing.md,
+    padding: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: theme.colors.border,
     // backgroundColor is set dynamically based on status
     marginBottom: theme.spacing.sm,
     borderRadius: theme.radius.md,
   },
-  // row container for name, time, status
-  orderRow: {
+  // top row for name and timestamp
+  topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
   },
   orderText: {
     fontSize: 16,
     color: theme.colors.text,
     fontWeight: "600",
+  },
+  orderName: {
+    fontSize: 30,
+    color: theme.colors.text,
+    fontWeight: "bold",
+  },
+  timestamp: {
+    fontSize: 14,
+    color: theme.colors.mutedText,
+  },
+  status: {
+    fontSize: 14,
+    color: theme.colors.mutedText,
+    textAlign: "center",
+    marginBottom: theme.spacing.md,
   },
   orderSubText: {
     fontSize: 14,

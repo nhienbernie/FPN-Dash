@@ -102,9 +102,11 @@ export default function ConfirmDelivery() {
         <Text style={styles.detailText}>
           Item PB: {orderDetails.item_pb ? "Yes" : "No"}
         </Text>
+        {/**
         <Text style={styles.detailText}>
           Item Mac & Cheese: {orderDetails.item_mac_cheese ? "Yes" : "No"}
         </Text>
+        **/}
         <Text style={styles.detailText}>
           Notes: {orderDetails.notes || "None"}
         </Text>

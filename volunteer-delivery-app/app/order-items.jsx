@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
@@ -8,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
@@ -62,10 +62,11 @@ export default function OrderItems() {
       });
 
       if (insertError) {
+        console.error("Insert error:", insertError);
         if (insertError.code === "23505") {
           Alert.alert("Error", "You already have an active order.");
         } else {
-          Alert.alert("Error", "Failed to place order.");
+          Alert.alert("Error", `Failed to place order: ${insertError.message || insertError.code || "Unknown error"}`);
         }
         return;
       }
