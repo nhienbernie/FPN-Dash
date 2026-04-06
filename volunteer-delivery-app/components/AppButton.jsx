@@ -8,7 +8,7 @@ const VARIANTS = {
     text: theme.colors.primaryText,
   },
   secondary: {
-    background: "#E4E7EC",
+    background: "#CE7E2D",
     pressed: "#D0D5DD",
     text: theme.colors.text,
   },
