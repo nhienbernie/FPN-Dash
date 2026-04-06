@@ -1,12 +1,17 @@
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
 export default function OrderFood() {
   const [checking, setChecking] = useState(true);
+  const [address, setAddress] = useState(null);
+
+  const formatAddress = (address) => {
+    return address || "";
+  };
 
   useEffect(() => {
     const checkExistingOrder = async () => {
@@ -23,6 +28,16 @@ export default function OrderFood() {
         if (order) {
           // Already has an active order — skip straight to status
           router.replace("/order-status");
+        }
+
+        // Fetch address
+        const { data: customers } = await supabase
+          .from("customers")
+          .select("address")
+          .eq("uid", user.id)
+          .single();
+        if (customers) {
+          setAddress(customers.address);
         }
       } catch (_) {
         // No order found, stay on this screen
@@ -50,6 +65,12 @@ export default function OrderFood() {
         onPress={() => router.push("/order-items")}
         style={styles.button}
       />
+      {address && (
+        <Text style={styles.address}>Delivering to {formatAddress(address)}.</Text>
+      )}
+      <TouchableOpacity onPress={() => Linking.openURL('tel:+14437644960')}>
+        <Text style={styles.link}>Need help? Tap here to contact FPN.</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -61,6 +82,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   title: {
     fontSize: 28,
@@ -68,6 +92,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: 8,
     textAlign: "center",
+    marginTop: 50
   },
   subtitle: {
     fontSize: 16,
@@ -77,5 +102,18 @@ const styles = StyleSheet.create({
   },
   button: {
     width: "100%",
+  },
+  address: {
+    fontSize: 16,
+    color: theme.colors.mutedText,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  link: {
+    fontSize: 16,
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
+    marginTop: 16,
+    textAlign: "center",
   },
 });

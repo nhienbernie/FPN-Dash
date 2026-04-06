@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
@@ -9,6 +9,11 @@ export default function OrderStatus() {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
+  const [address, setAddress] = useState(null);
+
+  const formatAddress = (address) => {
+    return address || "";
+  };
 
   const fetchOrder = async () => {
     try {
@@ -22,6 +27,16 @@ export default function OrderStatus() {
         .single();
 
       if (!error && data) setOrder(data);
+
+      // Fetch address
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("address")
+        .eq("uid", user.id)
+        .single();
+      if (customer) {
+        setAddress(customer.address);
+      }
     } catch (_) {
       // ignore
     } finally {
@@ -74,6 +89,12 @@ export default function OrderStatus() {
           onPress={() => router.replace("/order-food")}
           style={styles.button}
         />
+        {address && (
+          <Text style={styles.address}>delivering to {formatAddress(address)}</Text>
+        )}
+        <TouchableOpacity onPress={() => Linking.openURL('tel:+14437644960')}>
+          <Text style={styles.link}>need help? Contact FPN</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -123,6 +144,12 @@ export default function OrderStatus() {
         variant="secondary"
         style={styles.button}
       />
+      {address && (
+        <Text style={styles.address}>delivering to {formatAddress(address)}</Text>
+      )}
+      <TouchableOpacity onPress={() => Linking.openURL('tel:+14437644960')}>
+        <Text style={styles.link}>need help? Contact FPN</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -134,6 +161,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
     backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   title: {
     fontSize: 28,
@@ -141,6 +171,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: 24,
     textAlign: "center",
+    marginTop: 50
   },
   card: {
     width: "100%",
@@ -167,5 +198,18 @@ const styles = StyleSheet.create({
   button: {
     width: "100%",
     marginBottom: 12,
+  },
+  address: {
+    fontSize: 16,
+    color: theme.colors.mutedText,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  link: {
+    fontSize: 16,
+    color: theme.colors.primary,
+    textDecorationLine: 'underline',
+    marginTop: 16,
+    textAlign: "center",
   },
 });

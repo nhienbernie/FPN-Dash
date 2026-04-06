@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -8,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
@@ -94,10 +94,11 @@ export default function OrderItems() {
         .single();
 
       if (insertError) {
+        console.error("Insert error:", insertError);
         if (insertError.code === "23505") {
           Alert.alert("Error", "You already have an active order.");
         } else {
-          Alert.alert("Error", "Failed to place order.");
+          Alert.alert("Error", `Failed to place order: ${insertError.message || insertError.code || "Unknown error"}`);
         }
         return;
       }
@@ -133,7 +134,8 @@ export default function OrderItems() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <View style={styles.outerContainer}>
+      <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Select Items</Text>
       <Text style={styles.subtitle}>Choose what you'd like in your order</Text>
 
@@ -183,15 +185,16 @@ export default function OrderItems() {
       />
       {loading && <Text style={styles.loadingText}>Placing order...</Text>}
     </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  centered: {
+  outerContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   container: {
     flexGrow: 1,
@@ -204,6 +207,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: theme.colors.text,
     marginBottom: 8,
+    marginTop: 50
   },
   subtitle: {
     fontSize: 16,

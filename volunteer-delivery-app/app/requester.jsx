@@ -242,9 +242,14 @@ export default function RequesterScreen() {
           <View style={modalStyles.card}>
             <Text style={modalStyles.title}>Disclaimer</Text>
             <Text style={modalStyles.body}>
-              The information you provide is used solely to verify your
-              eligibility for food assistance. All data is kept confidential and
-              will not be shared with third parties.
+              To ensure we can deliver food to those in need, we ask that{" "}
+              <Text style={{ fontWeight: "700" }}>you only use this service</Text>
+              {" "}if{" "}
+              <Text style={{ fontWeight: "700" }}>both</Text>
+              {" "}of the following statements are true:{"\n"}
+              {"\n"}• I am unable to travel to any of the FPN pantries in person{"\n"}
+              • I have no family, friends or neighbors who can pick up food for me{"\n"}
+              {"\n"}If either of these do not apply to you, we ask that you travel or send someone else to pick up your food in person, so that this service is available to those with no such options.
             </Text>
             <AppButton
               title="I Understand"
@@ -288,6 +293,7 @@ export default function RequesterScreen() {
                 value={formValues[field.key]}
                 onChangeText={(text) => handleChange(field.key, text)}
                 placeholder={field.placeholder}
+                placeholderTextColor={theme.colors.mutedText}
                 keyboardType={field.keyboardType}
                 maxLength={field.key === "dob" ? 10 : undefined}
                 autoCapitalize="none"
@@ -316,6 +322,7 @@ export default function RequesterScreen() {
                     clearGeneralErrors();
                   }}
                   placeholder="Enter 6-digit code"
+                  placeholderTextColor={theme.colors.mutedText}
                   keyboardType="number-pad"
                   autoCapitalize="none"
                   editable={submitState === "idle"}
