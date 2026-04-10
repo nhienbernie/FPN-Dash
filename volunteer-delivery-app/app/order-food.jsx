@@ -62,7 +62,7 @@ export default function OrderFood() {
       <Text style={styles.subtitle}>Place your food order here</Text>
       <AppButton
         title="Order Food"
-        onPress={() => router.push("/order-items")}
+        onPress={() => router.push("/order-boxes")}
         style={styles.button}
       />
       {address && (

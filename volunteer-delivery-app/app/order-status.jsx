@@ -22,7 +22,7 @@ export default function OrderStatus() {
 
       const { data, error } = await supabase
         .from("orders")
-        .select("order_id, status, created_at, notes, order_items(item_id, items(label))")
+        .select("order_id, status, created_at, notes, box_count, boxes(box_id, box_number, order_items(item_id, items(label)))")
         .eq("customer_uid", user.id)
         .single();
 
@@ -99,9 +99,10 @@ export default function OrderStatus() {
     );
   }
 
-  const selectedItems = (order.order_items ?? [])
-    .map((r) => r.items?.label)
-    .filter(Boolean);
+  const boxes = [...(order.boxes ?? [])].sort(
+    (a, b) => a.box_number - b.box_number
+  );
+  const multiBox = boxes.length > 1;
 
   return (
     <View style={styles.container}>
@@ -116,10 +117,21 @@ export default function OrderStatus() {
           {new Date(order.created_at).toLocaleString()}
         </Text>
 
-        {selectedItems.length > 0 && (
+        {boxes.length > 0 && (
           <>
             <Text style={styles.label}>Items</Text>
-            <Text style={styles.value}>{selectedItems.join(", ")}</Text>
+            {boxes.map((box) => {
+              const labels = (box.order_items ?? [])
+                .map((r) => r.items?.label)
+                .filter(Boolean);
+              if (labels.length === 0) return null;
+              return (
+                <Text key={box.box_id} style={styles.value}>
+                  {multiBox ? `Box ${box.box_number}: ` : ""}
+                  {labels.join(", ")}
+                </Text>
+              );
+            })}
           </>
         )}
 
