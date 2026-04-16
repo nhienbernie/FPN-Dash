@@ -1,53 +1,124 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import AppButton from "../components/AppButton";
+import { useOrderSubscription } from "../lib/orderRealtime";
+import {
+  canCancelOrder,
+  getOrderStatusMeta,
+  normalizeOrder,
+  normalizeOrderStatus,
+  ORDER_PROGRESS_STAGES,
+  ORDER_STATUS,
+} from "../lib/orderStatus";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme";
 
+function OrderProgress({ status }) {
+  const normalizedStatus = normalizeOrderStatus(status);
+  const currentStep = getOrderStatusMeta(normalizedStatus).stepIndex;
+
+  return (
+    <View style={styles.progressContainer}>
+      {ORDER_PROGRESS_STAGES.map((stage, index) => {
+        const meta = getOrderStatusMeta(stage);
+        const isComplete = index <= currentStep;
+        const isCurrent = index === currentStep;
+
+        return (
+          <View key={stage} style={styles.progressStep}>
+            <View
+              style={[
+                styles.progressDot,
+                {
+                  backgroundColor: isComplete ? meta.accentColor : theme.colors.background,
+                  borderColor: meta.borderColor,
+                },
+                isCurrent ? styles.progressDotCurrent : null,
+              ]}
+            />
+            {index < ORDER_PROGRESS_STAGES.length - 1 ? (
+              <View
+                style={[
+                  styles.progressLine,
+                  {
+                    backgroundColor: isComplete
+                      ? meta.accentColor
+                      : theme.colors.border,
+                  },
+                ]}
+              />
+            ) : null}
+            <Text style={styles.progressLabel}>{meta.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function OrderFood() {
-  const [orderPlaced, setOrderPlaced] = useState(false);
-  const [orderTime, setOrderTime] = useState(null);
-  const [orderStatus, setOrderStatus] = useState("pending");
-  const [orderId, setOrderId] = useState(null);
-  useEffect(() => {
-    const checkExistingOrder = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+  const [currentOrder, setCurrentOrder] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-        const { data: order, error } = await supabase
-          .from("orders")
-          .select("order_id, status, created_at")
-          .eq("customer_uid", user.id)
-          .single();
-
-        if (order && !error) {
-          setOrderId(order.order_id);
-          setOrderTime(new Date(order.created_at));
-          setOrderStatus(order.status);
-          setOrderPlaced(true);
-        }
-      } catch (_error) {
-        // Ignore errors on load
-      }
-    };
-    checkExistingOrder();
+  const applyOrder = useCallback((order) => {
+    setCurrentOrder(order ? normalizeOrder(order) : null);
   }, []);
 
-  const [loading, setLoading] = useState(false);
+  const fetchLatestOrder = useCallback(async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      applyOrder(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("order_id, status, created_at, customer_uid, volunteer_uid")
+      .eq("customer_uid", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error fetching latest order:", error);
+      return;
+    }
+
+    applyOrder(data);
+  }, [applyOrder]);
+
+  useEffect(() => {
+    fetchLatestOrder();
+  }, [fetchLatestOrder]);
+
+  useOrderSubscription({
+    orderId: currentOrder?.order_id,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        applyOrder(null);
+        return;
+      }
+
+      applyOrder(payload.new);
+    },
+  });
 
   const handleOrderFood = async () => {
     setLoading(true);
     try {
-      // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
       if (userError || !user) {
         Alert.alert("Error", "User not authenticated.");
-        setLoading(false);
         return;
       }
 
-      // Fetch user data from customers table
       const { data: customer, error: fetchError } = await supabase
         .from("customers")
         .select("uid, first_name, last_name, address")
@@ -56,18 +127,16 @@ export default function OrderFood() {
 
       if (fetchError || !customer) {
         Alert.alert("Error", "Failed to fetch user data.");
-        setLoading(false);
         return;
       }
 
-      // Insert new order
       const { data: order, error: insertError } = await supabase
         .from("orders")
         .insert({
           customer_uid: customer.uid,
           name: customer.first_name,
           delivery_address: customer.address,
-          status: "pending",
+          status: ORDER_STATUS.PENDING,
         })
         .select()
         .single();
@@ -78,14 +147,10 @@ export default function OrderFood() {
         } else {
           Alert.alert("Error", "Failed to place order.");
         }
-        setLoading(false);
         return;
       }
 
-      setOrderId(order.order_id);
-      setOrderTime(new Date(order.created_at));
-      setOrderStatus(order.status);
-      setOrderPlaced(true);
+      applyOrder(order);
       Alert.alert("Order Placed", "Your food order has been placed successfully!");
     } catch (_error) {
       Alert.alert("Error", "An unexpected error occurred.");
@@ -95,24 +160,21 @@ export default function OrderFood() {
   };
 
   const handleCancelOrder = async () => {
-    if (!orderId) return;
+    if (!currentOrder?.order_id) return;
+
     setLoading(true);
     try {
       const { error } = await supabase
         .from("orders")
         .delete()
-        .eq("order_id", orderId);
+        .eq("order_id", currentOrder.order_id);
 
       if (error) {
         Alert.alert("Error", "Failed to cancel order.");
-        setLoading(false);
         return;
       }
 
-      setOrderPlaced(false);
-      setOrderId(null);
-      setOrderTime(null);
-      setOrderStatus("pending");
+      applyOrder(null);
       Alert.alert("Order Cancelled", "Your order has been cancelled.");
     } catch (_error) {
       Alert.alert("Error", "An unexpected error occurred.");
@@ -121,37 +183,23 @@ export default function OrderFood() {
     }
   };
 
-  const handleRefreshOrder = async () => {
-    if (!orderId) return;
-    setLoading(true);
-    try {
-      const { data: order, error } = await supabase
-        .from("orders")
-        .select("status, created_at")
-        .eq("order_id", orderId)
-        .single();
-
-      if (error || !order) {
-        Alert.alert("Error", "Failed to refresh order.");
-        setLoading(false);
-        return;
-      }
-
-      setOrderStatus(order.status);
-      setOrderTime(new Date(order.created_at));
-      Alert.alert("Order Refreshed", "Your order status has been updated.");
-    } catch (_error) {
-      Alert.alert("Error", "An unexpected error occurred.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const statusMeta = useMemo(
+    () => getOrderStatusMeta(currentOrder?.status),
+    [currentOrder?.status]
+  );
+  const orderTime = currentOrder?.created_at
+    ? new Date(currentOrder.created_at)
+    : null;
+  const showDeliveredActions = currentOrder?.status === ORDER_STATUS.DELIVERED;
+  const showCancelAction = currentOrder && canCancelOrder(currentOrder.status);
+  const disableCancelAction =
+    currentOrder && !showCancelAction && !showDeliveredActions;
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Order Food</Text>
       <Text style={styles.subtitle}>Place your food order here</Text>
-      {!orderPlaced ? (
+      {!currentOrder ? (
         <AppButton
           title="Order Food"
           onPress={handleOrderFood}
@@ -160,26 +208,52 @@ export default function OrderFood() {
         />
       ) : (
         <View style={styles.statusContainer}>
-          <Text style={styles.statusText}>
-            Order placed at: {orderTime ? orderTime.toLocaleString() : ""}
-          </Text>
-          <Text style={styles.statusText}>Status: {orderStatus}</Text>
-          <AppButton
-            title="Cancel Order"
-            onPress={handleCancelOrder}
-            disabled={loading}
-            variant="secondary"
-            style={styles.button}
-          />
-          <AppButton
-            title="Refresh Order"
-            onPress={handleRefreshOrder}
-            disabled={loading}
-            style={styles.button}
-          />
+          <View
+            style={[
+              styles.statusCard,
+              {
+                backgroundColor: statusMeta.backgroundColor,
+                borderColor: statusMeta.borderColor,
+              },
+            ]}
+          >
+            <Text style={styles.statusTimestamp}>
+              Order placed at: {orderTime ? orderTime.toLocaleString() : ""}
+            </Text>
+            <Text style={styles.statusLabel}>Status: {statusMeta.label}</Text>
+            <Text style={styles.statusDescription}>{statusMeta.description}</Text>
+            <OrderProgress status={currentOrder.status} />
+          </View>
+
+          {showCancelAction ? (
+            <AppButton
+              title="Cancel Order"
+              onPress={handleCancelOrder}
+              disabled={loading}
+              variant="secondary"
+              style={styles.button}
+            />
+          ) : null}
+
+          {disableCancelAction ? (
+            <View style={styles.lockedState}>
+              <Text style={styles.lockedStateText}>
+                This order is already being delivered and can no longer be cancelled.
+              </Text>
+            </View>
+          ) : null}
+
+          {showDeliveredActions ? (
+            <AppButton
+              title="Order Again"
+              onPress={handleOrderFood}
+              disabled={loading}
+              style={styles.button}
+            />
+          ) : null}
         </View>
       )}
-      {loading && <Text style={styles.loadingText}>Processing...</Text>}
+      {loading ? <Text style={styles.loadingText}>Processing...</Text> : null}
     </View>
   );
 }
@@ -210,13 +284,78 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statusContainer: {
-    alignItems: "center",
+    alignItems: "stretch",
     width: "100%",
   },
-  statusText: {
-    fontSize: 16,
+  statusCard: {
+    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+  },
+  statusTimestamp: {
+    fontSize: 14,
+    color: theme.colors.mutedText,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
+  },
+  statusLabel: {
+    fontSize: 22,
+    fontWeight: "700",
     color: theme.colors.text,
-    marginBottom: 16,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
+  },
+  statusDescription: {
+    fontSize: 15,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.lg,
+    textAlign: "center",
+  },
+  progressContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  progressStep: {
+    flex: 1,
+    alignItems: "center",
+  },
+  progressDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    marginBottom: theme.spacing.sm,
+  },
+  progressDotCurrent: {
+    transform: [{ scale: 1.12 }],
+  },
+  progressLine: {
+    position: "absolute",
+    top: 8,
+    left: "50%",
+    right: "-50%",
+    height: 2,
+    zIndex: -1,
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: theme.colors.mutedText,
+    textAlign: "center",
+    paddingHorizontal: 2,
+  },
+  lockedState: {
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  lockedStateText: {
+    color: theme.colors.mutedText,
+    fontSize: 14,
     textAlign: "center",
   },
   loadingText: {
