@@ -162,10 +162,31 @@ export default function VolunteerSignupScreen() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formValues.email,
         password: formValues.password,
+        options: {
+          data: {
+            role: "volunteer",
+            first_name: formValues.firstName,
+            last_name: formValues.lastName,
+            phone_number: formValues.phone,
+            zip: formValues.zip,
+          },
+        },
       });
 
       if (authError) {
-        setErrors({ email: authError.message });
+        setErrors({
+          general:
+            authError.message || "Unable to create your volunteer account.",
+        });
+        setSubmitState("idle");
+        return;
+      }
+
+      if (!authData?.user?.id) {
+        setErrors({
+          general:
+            "Account creation did not finish successfully. Please try again.",
+        });
         setSubmitState("idle");
         return;
       }
@@ -190,7 +211,7 @@ export default function VolunteerSignupScreen() {
       setSubmitState("success");
       router.replace("/volunteer-dashboard");
     } catch (_error) {
-      setErrors({ email: "Something went wrong. Please try again." });
+      setErrors({ general: "Something went wrong. Please try again." });
       setSubmitState("idle");
     }
   };
