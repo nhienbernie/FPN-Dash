@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
+import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { theme } from "../theme";
 
 export default function VolunteerDashboard() {
@@ -18,6 +19,8 @@ export default function VolunteerDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [hasVolunteerProfile, setHasVolunteerProfile] = useState(true);
+  const [profileMessage, setProfileMessage] = useState("");
   const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
   const router = useRouter();
 
@@ -33,9 +36,48 @@ export default function VolunteerDashboard() {
 
   const fetchOrders = async () => {
     setLoading(true);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      console.error("Error fetching volunteer session:", userError);
+      setLoading(false);
+      return;
+    }
+
+    const volunteerProfileResult = await ensureVolunteerProfile({
+      supabase,
+      user,
+    });
+
+    if (
+      volunteerProfileResult.status === "error" ||
+      volunteerProfileResult.status === "incomplete"
+    ) {
+      console.error(
+        "Error ensuring volunteer profile:",
+        volunteerProfileResult.message
+      );
+      setHasVolunteerProfile(false);
+      setProfileMessage(
+        volunteerProfileResult.message ||
+          "This account does not have a matching volunteer profile yet."
+      );
+      setOrders([]);
+      setLoading(false);
+      return;
+    }
+
+    setHasVolunteerProfile(true);
+    setProfileMessage(
+      volunteerProfileResult.status === "created"
+        ? "We restored your volunteer profile automatically."
+        : ""
+    );
+
     const { data, error } = await supabase
       .from("orders")
       .select("*")
@@ -68,7 +110,7 @@ export default function VolunteerDashboard() {
         useNativeDriver: true,
       }).start();
     }
-  }, [selectedOrder]);
+  }, [selectedOrder, slideAnim]);
 
   const handleClose = () => {
     // slide down then hide
@@ -117,8 +159,16 @@ export default function VolunteerDashboard() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Orders</Text>
+      {hasVolunteerProfile && profileMessage ? (
+        <Text style={styles.status}>{profileMessage}</Text>
+      ) : null}
       {loading ? (
         <Text>Loading…</Text>
+      ) : !hasVolunteerProfile ? (
+        <Text style={styles.status}>
+          {profileMessage ||
+            "This account is signed in, but it does not have a matching volunteer profile in the database yet."}
+        </Text>
       ) : (
         <FlatList
           data={orders}

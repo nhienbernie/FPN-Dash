@@ -17,6 +17,7 @@ import {
 } from "../validators/volunteerValidators";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { supabase } from "../services/supabase";
+import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 
 const FIELDS = [
   {
@@ -75,6 +76,24 @@ export default function SignInScreen() {
 
     if (authError) {
       setErrors({ general: "Invalid credentials. Please try again." });
+      setSubmitState("idle");
+      return;
+    }
+
+    const volunteerProfileResult = await ensureVolunteerProfile({
+      supabase,
+      user: authData.user,
+    });
+
+    if (
+      volunteerProfileResult.status === "error" ||
+      volunteerProfileResult.status === "incomplete"
+    ) {
+      setErrors({
+        general:
+          volunteerProfileResult.message ||
+          "Unable to restore your volunteer profile.",
+      });
       setSubmitState("idle");
       return;
     }
