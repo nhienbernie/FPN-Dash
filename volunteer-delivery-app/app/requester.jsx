@@ -17,9 +17,9 @@ import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { theme } from "../theme";
 import { digitsOnly } from "../validators/volunteerValidators";
 
-const DEMO_API_BASE_URL =
+const AUTH_API_BASE_URL =
   process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
-const DEMO_CODE_LENGTH = 6;
+const VERIFICATION_CODE_LENGTH = 6;
 
 // To automatically format input as the user types their DOB
 const DOB_DIGIT_LENGTH = 8;
@@ -141,8 +141,8 @@ export default function RequesterScreen() {
     };
   };
 
-  const sendDemoRequest = async (path, payload) => {
-    const response = await fetch(`${DEMO_API_BASE_URL}${path}`, {
+  const sendAuthRequest = async (path, payload) => {
+    const response = await fetch(`${AUTH_API_BASE_URL}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -167,8 +167,7 @@ export default function RequesterScreen() {
     setErrors({});
 
     try {
-      // Start the demo verification flow using the pantry-matched phone and DOB.
-      const response = await sendDemoRequest("/api/food-signup/start", {
+      const response = await sendAuthRequest("/api/food-signup/start", {
         phone: validatedValues.phone,
         dob: validatedValues.dob,
       });
@@ -192,7 +191,7 @@ export default function RequesterScreen() {
 
     if (!validatedValues) return;
 
-    if (trimmedCode.length !== DEMO_CODE_LENGTH) {
+    if (trimmedCode.length !== VERIFICATION_CODE_LENGTH) {
       setErrors({ code: "Verification code must be 6 digits." });
       return;
     }
@@ -202,7 +201,7 @@ export default function RequesterScreen() {
     setErrors({});
 
     try {
-      const response = await sendDemoRequest("/api/food-signup/verify", {
+      const response = await sendAuthRequest("/api/food-signup/verify", {
         phone: normalizedPhone || validatedValues.phone,
         dob: validatedValues.dob,
         code: trimmedCode,
@@ -283,7 +282,7 @@ export default function RequesterScreen() {
           <Text style={styles.stepHint}>
             {verificationRequested
               ? "Enter the 6-digit code to finish signing in."
-              : "Enter your phone number and date of birth to continue."}
+              : "Enter your phone number and date of birth to receive a login code by text."}
           </Text>
 
           {FIELDS.map((field) => (
@@ -317,7 +316,7 @@ export default function RequesterScreen() {
                   value={verificationCode}
                   onChangeText={(text) => {
                     setVerificationCode(
-                      digitsOnly(text).slice(0, DEMO_CODE_LENGTH),
+                      digitsOnly(text).slice(0, VERIFICATION_CODE_LENGTH),
                     );
                     clearGeneralErrors();
                   }}

@@ -7,9 +7,9 @@ const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const DEMO_CODE = "123456";
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
+const OTP_CODE_LENGTH = 6;
 
 const DATA_PATH = path.join(__dirname, "data", "pantry-users.json");
 const ENV_PATH = path.join(__dirname, "..", ".env");
@@ -84,6 +84,10 @@ const buildSessionPayload = (session) => ({
   expires_at: session.expires_at,
 });
 const buildRandomPassword = () => crypto.randomBytes(24).toString("hex");
+const buildVerificationCode = () =>
+  crypto.randomInt(0, 10 ** OTP_CODE_LENGTH).toString().padStart(OTP_CODE_LENGTH, "0");
+const maskPhone = (phone = "") =>
+  phone.length >= 4 ? `***-***-${phone.slice(-4)}` : phone;
 
 const loadPantryUsers = () => {
   const raw = fs.readFileSync(DATA_PATH, "utf8");
@@ -210,6 +214,36 @@ app.use(express.json());
 
 const TEXTBELT_KEY = process.env.TEXTBELT_KEY || "textbelt";
 
+const sendSms = async ({ to, message }) => {
+  if (!to || !message) {
+    throw new Error("Both 'to' and 'message' are required.");
+  }
+
+  const normalised = normalizePhone(to);
+  if (normalised.length < 10) {
+    throw new Error("Phone number must be at least 10 digits.");
+  }
+
+  const phone = normalised.length === 10 ? `+1${normalised}` : `+${normalised}`;
+
+  const tbRes = await fetch("https://textbelt.com/text", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, message, key: TEXTBELT_KEY }),
+  });
+  const tbData = await tbRes.json();
+
+  if (!tbData.success) {
+    throw new Error(tbData.error || "Unable to send verification code.");
+  }
+
+  console.log(
+    `[sms] SMS sent to ${phone}, quota remaining: ${tbData.quotaRemaining}`
+  );
+
+  return { to: phone, quotaRemaining: tbData.quotaRemaining };
+};
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -225,43 +259,22 @@ app.get("/api/health", (_req, res) => {
 app.post("/api/notify/sms", async (req, res) => {
   const { to, message } = req.body ?? {};
 
-  if (!to || !message) {
-    return res.status(400).json({
-      status: "invalid_request",
-      message: "Both 'to' and 'message' are required.",
-    });
-  }
-
-  const normalised = normalizePhone(to);
-  if (normalised.length < 10) {
-    return res.status(400).json({
-      status: "invalid_phone",
-      message: "Phone number must be at least 10 digits.",
-    });
-  }
-
-  const phone = normalised.length === 10 ? `+1${normalised}` : `+${normalised}`;
-
   try {
-    const tbRes = await fetch("https://textbelt.com/text", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, message, key: TEXTBELT_KEY }),
-    });
-    const tbData = await tbRes.json();
-    if (!tbData.success) {
-      console.error("[sms] TextBelt error:", tbData.error);
-      return res.status(500).json({ status: "error", message: tbData.error });
-    }
-    console.log(`[sms] SMS sent to ${phone}, quota remaining: ${tbData.quotaRemaining}`);
-    return res.json({ status: "sent", to: phone });
+    const result = await sendSms({ to, message });
+    return res.json({ status: "sent", to: result.to });
   } catch (err) {
-    console.error("[sms] Failed to send SMS:", err.message);
-    return res.status(500).json({ status: "error", message: err.message });
+    const messageText = err.message || "Unable to send SMS.";
+    const status = messageText.includes("required") || messageText.includes("digits")
+      ? 400
+      : 500;
+    return res.status(status).json({
+      status: "error",
+      message: messageText,
+    });
   }
 });
 
-app.post("/api/food-signup/start", (req, res) => {
+app.post("/api/food-signup/start", async (req, res) => {
   const phoneInput = req.body?.phone;
   const dobInput = req.body?.dob;
 
@@ -285,14 +298,35 @@ app.post("/api/food-signup/start", (req, res) => {
       message: "We could not match that phone number and date of birth to a pantry record.",
     });
 
+  const code = buildVerificationCode();
   const key = buildVerificationKey(normalizedPhone, normalizedDob);
   pendingVerifications.set(key, {
-    code: DEMO_CODE,
+    code,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
     attemptsRemaining: MAX_VERIFY_ATTEMPTS,
   });
 
-  return res.json({ status: "verification_required", message: "Verification code sent.", normalizedPhone });
+  try {
+    await sendSms({
+      to: normalizedPhone,
+      message: `Your Food Pantry Network verification code is ${code}. It expires in 10 minutes.`,
+    });
+  } catch (error) {
+    pendingVerifications.delete(key);
+    console.error("[sms] Failed to send signup verification code:", error.message);
+    return res.status(500).json({
+      status: "sms_error",
+      message:
+        error.message ||
+        "Unable to send the verification code by SMS right now.",
+    });
+  }
+
+  return res.json({
+    status: "verification_required",
+    message: `Verification code sent to ${maskPhone(normalizedPhone)}.`,
+    normalizedPhone,
+  });
 });
 
 app.post("/api/food-signup/verify", async (req, res) => {
