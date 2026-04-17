@@ -10,6 +10,13 @@ import {
   View,
 } from "react-native";
 import AppButton from "../components/AppButton";
+import {
+  calculateDistanceMiles,
+  estimateTravelMinutes,
+  formatDistanceMiles,
+  formatEtaMinutes,
+  hasCoordinates,
+} from "../lib/deliveryTracking";
 import { useOrdersFeedSubscription } from "../lib/orderRealtime";
 import {
   parseOrderNotes,
@@ -22,9 +29,24 @@ import {
   normalizeOrder,
   ORDER_STATUS,
 } from "../lib/orderStatus";
+import { lookupAddress } from "../services/geocode";
 import { supabase } from "../services/supabase";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { theme } from "../theme";
+
+function buildEtaPreview(coords, deliveryCoords) {
+  const distanceMiles = calculateDistanceMiles(coords, deliveryCoords);
+  const etaMinutes = estimateTravelMinutes(distanceMiles);
+
+  if (!Number.isFinite(distanceMiles) || !Number.isFinite(etaMinutes)) {
+    return null;
+  }
+
+  return {
+    distanceLabel: formatDistanceMiles(distanceMiles),
+    etaLabel: formatEtaMinutes(etaMinutes),
+  };
+}
 
 export default function VolunteerDashboard() {
   const [availableOrders, setAvailableOrders] = useState([]);
@@ -36,7 +58,47 @@ export default function VolunteerDashboard() {
   const [hasVolunteerProfile, setHasVolunteerProfile] = useState(true);
   const [profileMessage, setProfileMessage] = useState("");
   const [locationSyncMessage, setLocationSyncMessage] = useState("");
+  const [dashboardCoords, setDashboardCoords] = useState(null);
+  const [availableOrderEta, setAvailableOrderEta] = useState({});
+  const [previewEtaState, setPreviewEtaState] = useState("idle");
+  const [previewEtaMessage, setPreviewEtaMessage] = useState("");
   const router = useRouter();
+
+  const loadDashboardLocation = useCallback(async ({ silent = false } = {}) => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        setDashboardCoords(null);
+        setPreviewEtaState("permission_denied");
+        setPreviewEtaMessage(
+          "Turn on location access to preview distance before accepting an order.",
+        );
+        return null;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const coords = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+
+      setDashboardCoords(coords);
+      setPreviewEtaState("ready");
+      setPreviewEtaMessage(
+        silent ? "" : "Order ETA previews refreshed from your current location.",
+      );
+      return coords;
+    } catch (error) {
+      console.error("Error getting volunteer dashboard location:", error);
+      setDashboardCoords(null);
+      setPreviewEtaState("location_error");
+      setPreviewEtaMessage("We could not get your current location right now.");
+      return null;
+    }
+  }, []);
 
   const buildTrackedNotes = useCallback(async (notes, statusToShare) => {
     try {
@@ -105,6 +167,7 @@ export default function VolunteerDashboard() {
           "This account does not have a matching volunteer profile yet.",
       );
       setAvailableOrders([]);
+      setAvailableOrderEta({});
       setActiveOrder(null);
       setLoading(false);
       return;
@@ -143,6 +206,7 @@ export default function VolunteerDashboard() {
     }
 
     setAvailableOrders((pendingOrders || []).map(normalizeOrder));
+    setAvailableOrderEta({});
     setActiveOrder(volunteerOrder ? normalizeOrder(volunteerOrder) : null);
     if (!volunteerOrder) {
       setLocationSyncMessage("");
@@ -161,10 +225,100 @@ export default function VolunteerDashboard() {
     },
   });
 
+  useEffect(() => {
+    if (!hasVolunteerProfile || availableOrders.length === 0) {
+      setAvailableOrderEta({});
+      setPreviewEtaMessage("");
+      if (previewEtaState === "loading") {
+        setPreviewEtaState("idle");
+      }
+      return;
+    }
+
+    if (dashboardCoords || previewEtaState === "permission_denied") {
+      return;
+    }
+
+    loadDashboardLocation({ silent: true });
+  }, [
+    availableOrders.length,
+    dashboardCoords,
+    hasVolunteerProfile,
+    loadDashboardLocation,
+    previewEtaState,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAvailableOrderEta = async () => {
+      if (!hasVolunteerProfile || availableOrders.length === 0) {
+        setAvailableOrderEta({});
+        return;
+      }
+
+      if (!hasCoordinates(dashboardCoords)) {
+        setAvailableOrderEta({});
+        return;
+      }
+
+      setPreviewEtaState("loading");
+
+      const entries = await Promise.all(
+        availableOrders.map(async (order) => {
+          const deliveryCoords = await lookupAddress(order.delivery_address);
+
+          if (!hasCoordinates(deliveryCoords)) {
+            return [
+              order.order_id,
+              { state: "address_unavailable" },
+            ];
+          }
+
+          const preview = buildEtaPreview(dashboardCoords, deliveryCoords);
+          if (!preview) {
+            return [order.order_id, { state: "address_unavailable" }];
+          }
+
+          return [
+            order.order_id,
+            {
+              state: "ready",
+              ...preview,
+            },
+          ];
+        }),
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setAvailableOrderEta(Object.fromEntries(entries));
+      setPreviewEtaState("ready");
+      setPreviewEtaMessage("Previewing route distance from your current location.");
+    };
+
+    loadAvailableOrderEta();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    availableOrders,
+    dashboardCoords,
+    hasVolunteerProfile,
+  ]);
+
   const acceptDisabled = useMemo(
     () => Boolean(activeOrder) || submitting,
     [activeOrder, submitting],
   );
+
+  const handleRefreshAvailableEta = async () => {
+    setPreviewEtaState("loading");
+    await loadDashboardLocation();
+  };
 
   const handleAcceptOrder = async () => {
     if (!selectedOrder || !userId) return;
@@ -321,6 +475,7 @@ export default function VolunteerDashboard() {
   const renderAvailableOrder = (order) => {
     const statusMeta = getOrderStatusMeta(order.status);
     const parsedNotes = parseOrderNotes(order.notes);
+    const etaPreview = availableOrderEta[order.order_id];
 
     return (
       <View
@@ -342,6 +497,16 @@ export default function VolunteerDashboard() {
         {parsedNotes.selectedItems.length > 0 ? (
           <Text style={styles.orderMeta}>
             Items: {parsedNotes.selectedItems.join(", ")}
+          </Text>
+        ) : null}
+        {etaPreview?.state === "ready" ? (
+          <Text style={styles.orderMeta}>
+            ETA: {etaPreview.etaLabel} ({etaPreview.distanceLabel} away)
+          </Text>
+        ) : null}
+        {etaPreview?.state === "address_unavailable" ? (
+          <Text style={styles.orderMeta}>
+            ETA preview unavailable for this delivery address.
           </Text>
         ) : null}
         <AppButton
@@ -460,7 +625,22 @@ export default function VolunteerDashboard() {
               volunteer profile.
             </Text>
           ) : availableOrders.length > 0 ? (
-            availableOrders.map(renderAvailableOrder)
+            <>
+              {previewEtaMessage ? (
+                <Text style={styles.emptyText}>{previewEtaMessage}</Text>
+              ) : null}
+              {previewEtaState === "loading" ? (
+                <Text style={styles.emptyText}>Refreshing ETA previews...</Text>
+              ) : null}
+              <AppButton
+                title="Refresh ETA Preview"
+                onPress={handleRefreshAvailableEta}
+                disabled={submitting || previewEtaState === "loading"}
+                variant="secondary"
+                style={styles.refreshButton}
+              />
+              {availableOrders.map(renderAvailableOrder)}
+            </>
           ) : (
             <Text style={styles.emptyText}>No pending orders are waiting right now.</Text>
           )}
@@ -584,6 +764,10 @@ const styles = StyleSheet.create({
   cardButton: {
     width: "100%",
     marginTop: theme.spacing.sm,
+  },
+  refreshButton: {
+    width: "100%",
+    marginBottom: theme.spacing.md,
   },
   modalOverlay: {
     flex: 1,
