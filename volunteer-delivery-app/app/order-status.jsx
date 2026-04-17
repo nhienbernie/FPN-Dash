@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { useOrderSubscription } from "../lib/orderRealtime";
+import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import {
     canCancelOrder,
     getOrderStatusMeta,
@@ -11,7 +12,6 @@ import {
     ORDER_PROGRESS_STAGES,
     ORDER_STATUS,
 } from "../lib/orderStatus";
-import { lookupAddress } from "../services/geocode";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -63,10 +63,6 @@ export default function OrderStatus() {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [address, setAddress] = useState(null);
-  const [customerLocation, setCustomerLocation] = useState(null);
-  const [etaMinutes, setEtaMinutes] = useState(null);
-  const [etaUpdating, setEtaUpdating] = useState(false);
-  const [etaMessage, setEtaMessage] = useState("");
 
   const applyOrder = useCallback((order) => {
     setOrder(order ? normalizeOrder(order) : null);
@@ -127,125 +123,9 @@ export default function OrderStatus() {
         return;
       }
 
-      applyOrder(payload.new);
+      fetchLatestOrder();
     },
   });
-
-  useEffect(() => {
-    let mounted = true;
-    const resolveAddress = async () => {
-      if (!order?.delivery_address) {
-        setCustomerLocation(null);
-        return;
-      }
-      const coords = await lookupAddress(order.delivery_address);
-      if (mounted) {
-        setCustomerLocation(coords);
-        if (!coords) {
-          setEtaMessage("Unable to resolve delivery address.");
-        }
-      }
-    };
-    resolveAddress();
-    return () => {
-      mounted = false;
-    };
-  }, [order?.delivery_address]);
-
-  // TODO: Re-enable ETA functionality when volunteer_lat and volunteer_long columns are added to orders table
-  // useEffect(() => {
-  //   let mounted = true;
-  //   let interval = null;
-  //
-  //   const updateEta = async () => {
-  //     if (!order) {
-  //       setEtaMinutes(null);
-  //       setEtaMessage("");
-  //       return;
-  //     }
-  //
-  //     if (order.status === ORDER_STATUS.PENDING || !order.volunteer_uid) {
-  //       setEtaMinutes(null);
-  //       setEtaMessage("Waiting for volunteer assignment.");
-  //       return;
-  //     }
-  //
-  //     if (!customerLocation) {
-  //       setEtaMinutes(null);
-  //       setEtaMessage("Looking up delivery address...");
-  //       return;
-  //     }
-  //
-  //     const { lat: volunteerLat, lng: volunteerLng } = getVolunteerCoordinates(order);
-  //     if (!isValidCoordinate(volunteerLat) || !isValidCoordinate(volunteerLng)) {
-  //       setEtaMinutes(null);
-  //       setEtaMessage("Volunteer location not available yet.");
-  //       return;
-  //     }
-  //
-  //     setEtaUpdating(true);
-  //     const minutes = await calculateEtaMinutes(
-  //       volunteerLat,
-  //       volunteerLng,
-  //       customerLocation.latitude,
-  //       customerLocation.longitude
-  //     );
-  //     if (!mounted) return;
-  //
-  //     if (minutes == null) {
-  //       setEtaMinutes(null);
-  //       setEtaMessage("Unable to estimate arrival time yet.");
-  //     } else {
-  //       setEtaMinutes(minutes);
-  //       setEtaMessage("");
-  //     }
-  //     setEtaUpdating(false);
-  //   };
-  //
-  //   updateEta();
-  //   if (order && order.status !== ORDER_STATUS.DELIVERED) {
-  //     interval = setInterval(updateEta, 20000);
-  //   }
-  //
-  //   return () => {
-  //     mounted = false;
-  //     if (interval) clearInterval(interval);
-  //   };
-  // }, [order?.order_id, order?.status, order?.volunteer_uid, customerLocation]);
-
-  const isValidCoordinate = (value) =>
-    typeof value === "number" && Number.isFinite(value) && value !== 0;
-
-  const getVolunteerCoordinates = (order) => {
-    const lat =
-      order?.volunteer_lat != null
-        ? Number(order.volunteer_lat)
-        : Number(order?.volunter_lat);
-    const lng =
-      order?.volunteer_long != null
-        ? Number(order.volunteer_long)
-        : Number(order?.volunter_long);
-    return { lat, lng };
-  };
-
-  const calculateEtaMinutes = async (
-    volunteerLat,
-    volunteerLng,
-    customerLat,
-    customerLng
-  ) => {
-    try {
-      const url = `https://router.project-osrm.org/route/v1/driving/${volunteerLng},${volunteerLat};${customerLng},${customerLat}?overview=false&alternatives=false&annotations=duration`;
-      const res = await fetch(url);
-      const data = await res.json();
-      const seconds = data?.routes?.[0]?.duration;
-      if (!seconds || !Number.isFinite(seconds)) return null;
-      return Math.max(0, Math.ceil(seconds / 60));
-    } catch (error) {
-      console.error("Error fetching ETA from OSRM:", error);
-      return null;
-    }
-  };
 
   const handleCancelOrder = async () => {
     if (!order) return;
@@ -281,6 +161,7 @@ export default function OrderStatus() {
     () => getOrderStatusMeta(order?.status),
     [order?.status]
   );
+  const parsedNotes = parseOrderNotes(order?.notes);
   const orderTime = order?.created_at
     ? new Date(order.created_at)
     : null;
@@ -313,7 +194,14 @@ export default function OrderStatus() {
   const boxes = [...(order.boxes ?? [])].sort(
     (a, b) => a.box_number - b.box_number
   );
-  const multiBox = boxes.length > 1;
+  const boxDetails = boxes.map((box) => ({
+    boxNumber: box.box_number,
+    items: (box.order_items ?? [])
+      .map((entry) => entry.items?.label)
+      .filter(Boolean),
+  }));
+  const selectedItems = parsedNotes.selectedItems;
+  const noteText = parsedNotes.userNotes;
 
   return (
     <View style={styles.container}>
@@ -333,16 +221,46 @@ export default function OrderStatus() {
         </Text>
         <Text style={styles.statusLabel}>Status: {statusMeta.label}</Text>
         <Text style={styles.statusDescription}>{statusMeta.description}</Text>
-        {/* TODO: Re-enable ETA display when volunteer location tracking is available */}
-        {/* <Text style={styles.etaText}>
-          {etaUpdating
-            ? "Estimating driver arrival..."
-            : etaMinutes != null
-            ? `Driver ETA: ${etaMinutes} min`
-            : etaMessage}
-        </Text> */}
         <OrderProgress status={order.status} />
+
+        {boxDetails.length > 0 ? (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailSectionTitle}>Order Details</Text>
+            {boxDetails.map((box) => (
+              <View key={box.boxNumber} style={styles.detailBlock}>
+                <Text style={styles.detailHeading}>
+                  {boxDetails.length > 1 ? `Box ${box.boxNumber}` : "Items"}
+                </Text>
+                <Text style={styles.detailText}>
+                  {box.items.length > 0 ? box.items.join(", ") : "No items selected"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : selectedItems.length > 0 ? (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailSectionTitle}>Order Details</Text>
+            <View style={styles.detailBlock}>
+              <Text style={styles.detailHeading}>Items</Text>
+              <Text style={styles.detailText}>{selectedItems.join(", ")}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {noteText ? (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailSectionTitle}>Special Instructions</Text>
+            <Text style={styles.detailText}>{noteText}</Text>
+          </View>
+        ) : null}
       </View>
+
+      <AppButton
+        title="Refresh Order"
+        onPress={handleRefresh}
+        disabled={loading}
+        style={styles.button}
+      />
 
       {showCancelAction ? (
         <AppButton
@@ -423,14 +341,7 @@ const styles = StyleSheet.create({
   statusDescription: {
     fontSize: 15,
     color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-    textAlign: "center",
-  },
-  etaText: {
-    fontSize: 16,
-    color: theme.colors.primary,
-    fontWeight: "600",
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     textAlign: "center",
   },
   progressContainer: {
@@ -478,6 +389,31 @@ const styles = StyleSheet.create({
     color: theme.colors.mutedText,
     fontSize: 14,
     textAlign: "center",
+  },
+  detailSection: {
+    marginTop: theme.spacing.lg,
+  },
+  detailSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.primary,
+    marginBottom: theme.spacing.sm,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailBlock: {
+    marginBottom: theme.spacing.sm,
+  },
+  detailHeading: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 4,
+  },
+  detailText: {
+    fontSize: 15,
+    color: theme.colors.text,
+    lineHeight: 22,
   },
   button: {
     width: "100%",

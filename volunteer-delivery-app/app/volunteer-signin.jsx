@@ -1,34 +1,40 @@
-import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useRouter } from "expo-router";
 
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import AppButton from "../components/AppButton";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { supabase } from "../services/supabase";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import {
-    buildInitialValues,
-    isValidEmail,
-    validateFieldSet,
+  buildInitialValues,
+  isValidEmail,
+  validateFieldSet,
 } from "../validators/volunteerValidators";
 
 const FIELDS = [
   {
-    key: "email",
-    label: "Email",
-    placeholder: "Enter your email address",
+    key: "identifier",
+    label: "Email or Username",
+    placeholder: "Enter your email or username",
     required: true,
     autoCapitalize: "none",
     keyboardType: "email-address",
-    validate: (value) =>
-      isValidEmail(value) ? null : "Enter a valid email address.",
+    validate: (value) => {
+      const trimmed = String(value ?? "").trim();
+      if (!trimmed) return "Enter your email or username.";
+      if (trimmed.includes("@")) {
+        return isValidEmail(trimmed) ? null : "Enter a valid email address.";
+      }
+      return null;
+    },
   },
   {
     key: "password",
@@ -69,7 +75,24 @@ export default function SignInScreen() {
 
     setSubmitState("loading");
 
-    const { email, password } = formValues;
+    const { identifier, password } = formValues;
+    let email = identifier.trim();
+
+    if (!email.includes("@")) {
+      const { data, error } = await supabase
+        .from("volunteers")
+        .select("email")
+        .eq("username", email)
+        .single();
+
+      if (error || !data?.email) {
+        setErrors({ general: "No account found with that username." });
+        setSubmitState("idle");
+        return;
+      }
+
+      email = data.email;
+    }
 
     const { data: authData, error: authError } =
       await supabase.auth.signInWithPassword({ email, password });
@@ -98,7 +121,6 @@ export default function SignInScreen() {
       return;
     }
 
-    console.log("Signed in successfully:", authData.user);
     setErrors({});
     setSubmitState("success");
     router.replace("/volunteer-dashboard");

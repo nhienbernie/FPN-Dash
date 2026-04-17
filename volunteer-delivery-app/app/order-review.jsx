@@ -9,6 +9,8 @@ import {
   View,
 } from "react-native";
 import AppButton from "../components/AppButton";
+import { buildOrderNotes } from "../lib/orderSelectionWorkaround";
+import { ORDER_STATUS } from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -73,14 +75,21 @@ export default function OrderReview() {
         return;
       }
 
+      const selectedLabels = [...new Set(allSelections.flat())].map(
+        (itemId) => itemLabels[itemId] ?? String(itemId)
+      );
+
       const { data: newOrder, error: orderError } = await supabase
         .from("orders")
         .insert({
           customer_uid: customer.uid,
           name: customer.first_name,
           delivery_address: customer.address,
-          status: "pending",
-          notes: notes.trim() || null,
+          status: ORDER_STATUS.PENDING,
+          notes: buildOrderNotes({
+            selectedItems: selectedLabels,
+            userNotes: notes,
+          }),
           box_count: boxCount,
         })
         .select("order_id")
