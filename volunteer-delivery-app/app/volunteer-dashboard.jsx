@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import AppButton from "../components/AppButton";
 import { useOrdersFeedSubscription } from "../lib/orderRealtime";
+import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import {
   ACTIVE_VOLUNTEER_STATUSES,
   canTransition,
@@ -235,6 +236,7 @@ export default function VolunteerDashboard() {
 
   const renderAvailableOrder = (order) => {
     const statusMeta = getOrderStatusMeta(order.status);
+    const parsedNotes = parseOrderNotes(order.notes);
 
     return (
       <View
@@ -253,6 +255,11 @@ export default function VolunteerDashboard() {
           {order.created_at ? new Date(order.created_at).toLocaleString() : ""}
         </Text>
         <Text style={styles.orderMeta}>Status: {statusMeta.label}</Text>
+        {parsedNotes.selectedItems.length > 0 ? (
+          <Text style={styles.orderMeta}>
+            Items: {parsedNotes.selectedItems.join(", ")}
+          </Text>
+        ) : null}
         <AppButton
           title={acceptDisabled ? "Finish active delivery first" : "Accept"}
           variant={acceptDisabled ? "secondary" : "primary"}
@@ -265,6 +272,7 @@ export default function VolunteerDashboard() {
   };
 
   const activeStatusMeta = getOrderStatusMeta(activeOrder?.status);
+  const activeParsedNotes = parseOrderNotes(activeOrder?.notes);
 
   return (
     <View style={styles.container}>
@@ -298,6 +306,16 @@ export default function VolunteerDashboard() {
               <Text style={styles.orderMeta}>
                 Address: {activeOrder.delivery_address}
               </Text>
+              {activeParsedNotes.selectedItems.length > 0 ? (
+                <Text style={styles.orderMeta}>
+                  Items: {activeParsedNotes.selectedItems.join(", ")}
+                </Text>
+              ) : null}
+              {activeParsedNotes.userNotes ? (
+                <Text style={styles.orderMeta}>
+                  Notes: {activeParsedNotes.userNotes}
+                </Text>
+              ) : null}
               <Text style={styles.orderHint}>{activeStatusMeta.description}</Text>
               <AppButton
                 title="View Delivery Details"
@@ -356,7 +374,10 @@ export default function VolunteerDashboard() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Confirm Acceptance</Text>
             {selectedOrder ? (
-              <>
+              (() => {
+                const parsedNotes = parseOrderNotes(selectedOrder.notes);
+                return (
+                  <>
                 <Text style={styles.modalText}>Name: {selectedOrder.name}</Text>
                 <Text style={styles.modalText}>
                   Requested:{" "}
@@ -367,7 +388,19 @@ export default function VolunteerDashboard() {
                 <Text style={styles.modalText}>
                   Address: {selectedOrder.delivery_address}
                 </Text>
-              </>
+                {parsedNotes.selectedItems.length > 0 ? (
+                  <Text style={styles.modalText}>
+                    Items: {parsedNotes.selectedItems.join(", ")}
+                  </Text>
+                ) : null}
+                {parsedNotes.userNotes ? (
+                  <Text style={styles.modalText}>
+                    Notes: {parsedNotes.userNotes}
+                  </Text>
+                ) : null}
+                  </>
+                );
+              })()
             ) : null}
             <AppButton
               title="Accept Order"

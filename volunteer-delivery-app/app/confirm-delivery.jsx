@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import { theme } from "../theme";
 
 export default function ConfirmDelivery() {
@@ -31,6 +32,7 @@ export default function ConfirmDelivery() {
     }
     return {};
   });
+  const parsedNotes = parseOrderNotes(orderDetails.notes);
 
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     address
@@ -52,8 +54,13 @@ export default function ConfirmDelivery() {
         <TouchableOpacity onPress={openMaps}>
           <Text style={styles.addressText}>{address || "Delivery address"}</Text>
         </TouchableOpacity>
+        {parsedNotes.selectedItems.length > 0 ? (
+          <Text style={styles.detailText}>
+            Items: {parsedNotes.selectedItems.join(", ")}
+          </Text>
+        ) : null}
         <Text style={styles.detailText}>
-          Notes: {orderDetails.notes || "None"}
+          Notes: {parsedNotes.userNotes || "None"}
         </Text>
         <TouchableOpacity
           style={{ marginTop: theme.spacing.md }}

@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { useOrderSubscription } from "../lib/orderRealtime";
+import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import {
   canCancelOrder,
   getOrderStatusMeta,
-  normalizeOrder,
   normalizeOrderStatus,
   ORDER_PROGRESS_STAGES,
   ORDER_STATUS,
@@ -70,7 +70,7 @@ export default function OrderStatus() {
   };
 
   const applyOrder = useCallback((nextOrder) => {
-    setOrder(nextOrder ? normalizeOrder(nextOrder) : null);
+    setOrder(nextOrder || null);
   }, []);
 
   const fetchOrder = useCallback(async () => {
@@ -83,7 +83,7 @@ export default function OrderStatus() {
 
       const { data, error } = await supabase
         .from("orders")
-        .select("order_id, status, created_at, notes, order_items(item_id, items(label))")
+        .select("order_id, status, created_at, notes")
         .eq("customer_uid", user.id)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -157,9 +157,8 @@ export default function OrderStatus() {
 
   if (initializing) return null;
 
-  const selectedItems = (order?.order_items ?? [])
-    .map((r) => r.items?.label)
-    .filter(Boolean);
+  const parsedNotes = parseOrderNotes(order?.notes);
+  const selectedItems = parsedNotes.selectedItems;
   const statusMeta = getOrderStatusMeta(order?.status);
   const showCancelAction = order && canCancelOrder(order.status);
   const showDeliveredActions = order?.status === ORDER_STATUS.DELIVERED;
@@ -214,10 +213,10 @@ export default function OrderStatus() {
           </>
         )}
 
-        {order.notes ? (
+        {parsedNotes.userNotes ? (
           <>
             <Text style={styles.label}>Notes</Text>
-            <Text style={styles.value}>{order.notes}</Text>
+            <Text style={styles.value}>{parsedNotes.userNotes}</Text>
           </>
         ) : null}
       </View>

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
+import { buildOrderNotes } from "../lib/orderSelectionWorkaround";
 import { ORDER_STATUS } from "../lib/orderStatus";
 import { theme } from "../theme";
 
@@ -82,14 +83,23 @@ export default function OrderItems() {
         return;
       }
 
-      const { data: newOrder, error: insertError } = await supabase
+      const selectedLabels = categories
+        .flatMap((category) => category.items)
+        .filter((item) => selected.includes(item.id))
+        .map((item) => item.label);
+      const notesPayload = buildOrderNotes({
+        selectedItems: selectedLabels,
+        userNotes: notes,
+      });
+
+      const { error: insertError } = await supabase
         .from("orders")
         .insert({
           customer_uid: customer.uid,
           name: customer.first_name,
           delivery_address: customer.address,
           status: ORDER_STATUS.PENDING,
-          notes: notes.trim() || null,
+          notes: notesPayload,
         })
         .select("order_id")
         .single();
@@ -102,20 +112,6 @@ export default function OrderItems() {
           Alert.alert("Error", `Failed to place order: ${insertError.message || insertError.code || "Unknown error"}`);
         }
         return;
-      }
-
-      if (selected.length > 0) {
-        const rows = selected.map((item_id) => ({
-          order_id: newOrder.order_id,
-          item_id,
-        }));
-        const { error: itemsError } = await supabase
-          .from("order_items")
-          .insert(rows);
-        if (itemsError) {
-          Alert.alert("Error", "Failed to save selected items.");
-          return;
-        }
       }
 
       router.replace("/order-status");
