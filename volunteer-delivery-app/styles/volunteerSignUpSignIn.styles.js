@@ -5,6 +5,9 @@ export const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   content: {
     paddingHorizontal: 20,
@@ -24,11 +27,20 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  errorBanner: {
+    backgroundColor: "#FEF3F2",
+    borderWidth: 1,
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.md,
+    padding: 12,
+    marginBottom: 16,
+  },
   title: {
     fontSize: 28,
     fontWeight: "700",
     color: theme.colors.text,
     marginBottom: 6,
+    marginTop: 50
   },
   subtitle: {
     fontSize: 15,

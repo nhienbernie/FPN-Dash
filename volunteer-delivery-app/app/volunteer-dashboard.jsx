@@ -1,49 +1,57 @@
-import { useState, useEffect, useRef } from "react";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  StyleSheet,
-  Text,
-  View,
-  FlatList,
-  Modal,
-  TouchableOpacity,
-  Animated,
-  Dimensions,
+    Animated,
+    Dimensions,
+    FlatList,
+    Modal,
+    StyleSheet,
+    Text,
+    View
 } from "react-native";
+import AppButton from "../components/AppButton";
+import { useOrdersFeedSubscription } from "../lib/orderRealtime";
+import { normalizeOrderStatus, ORDER_STATUS } from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
-import AppButton from "../components/AppButton";
 
 export default function VolunteerDashboard() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [user, setUser] = useState(null);
   const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
   const router = useRouter();
 
-  // fetch specific columns from Supabase orders table
-  /**
-  const fetchOrders = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("status", "pending");
-    if (error) {
-      console.error("Error fetching orders:", error);
-    } else {
-      setOrders(data);
-    }
-    setLoading(false);
+  const applyOrder = useCallback((order) => {
+    setOrders((prev) => {
+      const existingIndex = prev.findIndex((o) => o.order_id === order.order_id);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = order;
+        return updated;
+      } else {
+        return [...prev, order];
+      }
+    });
+  }, []);
+
+  const timeAgo = (date) => {
+    if (!date) return '';
+    const now = new Date();
+    const diff = now - new Date(date);
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours > 0) return `${hours} hours ago`;
+    const minutes = Math.floor(diff / (1000 * 60));
+    return `${minutes} minutes ago`;
   };
-  ***/
 
   const fetchOrders = async () => {
     setLoading(true);
     
     const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
     
     const { data, error } = await supabase
       .from("orders")
@@ -53,7 +61,12 @@ export default function VolunteerDashboard() {
     if (error) {
       console.error("Error fetching orders:", error);
     } else {
-      setOrders(data);
+      // Sort orders: pending first, then accepted, then in_transit, then delivered
+      const sortedData = data.sort((a, b) => {
+        const statusOrder = { [ORDER_STATUS.PENDING]: 1, [ORDER_STATUS.ACCEPTED]: 2, [ORDER_STATUS.IN_TRANSIT]: 3, [ORDER_STATUS.DELIVERED]: 4 };
+        return statusOrder[normalizeOrderStatus(a.status)] - statusOrder[normalizeOrderStatus(b.status)];
+      });
+      setOrders(sortedData);
     }
     setLoading(false);
   };
@@ -61,6 +74,18 @@ export default function VolunteerDashboard() {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  useOrdersFeedSubscription({
+    volunteerUid: user?.id,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        setOrders((prev) => prev.filter((o) => o.order_id !== payload.old.order_id));
+        return;
+      }
+
+      applyOrder(payload.new);
+    },
+  });
 
   // when selectedOrder is set, show modal and slide up
   useEffect(() => {
@@ -87,25 +112,35 @@ export default function VolunteerDashboard() {
   };
 
   const renderItem = ({ item }) => {
-    const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
-    const backgroundColor = isAccepted ? "#FD9A3A" : "#FEF3C7";
+    const normalizedStatus = normalizeOrderStatus(item.status);
+    const isAccepted = normalizedStatus === ORDER_STATUS.ACCEPTED;
+    const isInTransit = normalizedStatus === ORDER_STATUS.IN_TRANSIT;
+    const isUrgent = normalizedStatus === ORDER_STATUS.PENDING && item.created_at && (new Date() - new Date(item.created_at)) > 2 * 60 * 60 * 1000;
+    const isDelivered = normalizedStatus === ORDER_STATUS.DELIVERED;
+    const backgroundColor = isAccepted ? "#FD9A3A" : isInTransit ? "#7A5AF8" : isUrgent ? "#ff572d" : isDelivered ? "#90EE90" : "#FEF3C7";
 
     return (
       <View style={[styles.orderItem, { backgroundColor }]}>
-        <View style={styles.orderRow}>
-          <Text style={styles.orderSubText}>{item.name}</Text>
-          <Text style={styles.orderSubText}>
+        <View style={styles.topRow}>
+          <Text style={styles.orderName}>{item.name}</Text>
+          <Text style={[styles.timestamp, isUrgent && { color: '#000000' }]}>
             {item.created_at
-              ? new Date(item.created_at).toLocaleString()
+              ? timeAgo(item.created_at)
               : ""}
           </Text>
-          <Text style={styles.orderSubText}>{item.status}</Text>
         </View>
-        <AppButton
-          title={isAccepted ? "Accepted" : "Accept"}
-          variant={isAccepted ? "secondary" : "primary"}
-          onPress={() => setSelectedOrder(item)}
-        />
+        <Text style={[styles.status, isUrgent && { color: '#000000', fontWeight: 'bold' }]}>
+          {isUrgent ? "Status: Urgent" : `Status: ${normalizedStatus}`}
+        </Text>
+        {!isDelivered && (
+          <AppButton
+            title={isAccepted || isInTransit ? "View Details" : "Accept"}
+            variant={isAccepted || isInTransit ? "secondary" : "primary"}
+            style={{ backgroundColor: 'black' }}  // Custom background color
+            textStyle={{ color: 'white' }}      // Custom text color
+            onPress={() => setSelectedOrder(item)}
+          />
+        )}
       </View>
     );
   };
@@ -144,10 +179,24 @@ export default function VolunteerDashboard() {
                   Name: {selectedOrder.name}
                 </Text>
                 <Text style={styles.detailText}>
-                  Status: {selectedOrder.status}
+                  Status: {normalizeOrderStatus(selectedOrder.status)}
                 </Text>
                 <Text style={styles.detailText}>
                   Address: {selectedOrder.delivery_address}
+                </Text>
+                <Text style={styles.detailText}>
+                  Item Milk: {selectedOrder.item_milk ? "Yes" : "No"}
+                </Text>
+                <Text style={styles.detailText}>
+                  Item PB: {selectedOrder.item_pb ? "Yes" : "No"}
+                </Text>
+                {
+                <Text style={styles.detailText}>
+                  Item Mac & Cheese: {selectedOrder.item_mac_cheese ? "Yes" : "No"}
+                </Text>
+                }
+                <Text style={styles.detailText}>
+                  Notes: {selectedOrder.notes || "None"}
                 </Text>
               </>
             )}
@@ -159,7 +208,7 @@ export default function VolunteerDashboard() {
 
                 const { error } = await supabase
                   .from("orders")
-                  .update({ status: "awaiting delivery", volunteer_uid: user.id })
+                  .update({ status: ORDER_STATUS.ACCEPTED, volunteer_uid: user.id })
                   .eq("order_id", selectedOrder.order_id);
 
                 if (error) {
@@ -203,6 +252,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
+    borderWidth: 12,
+    borderColor: "#398288",
+    borderRadius: 55
   },
   title: {
     fontSize: 24,
@@ -210,26 +262,42 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginBottom: theme.spacing.md,
     textAlign: "center",
+    marginTop: 50
   },
   orderItem: {
-    padding: theme.spacing.md,
+    padding: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: theme.colors.border,
     // backgroundColor is set dynamically based on status
     marginBottom: theme.spacing.sm,
     borderRadius: theme.radius.md,
   },
-  // row container for name, time, status
-  orderRow: {
+  // top row for name and timestamp
+  topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
   },
   orderText: {
     fontSize: 16,
     color: theme.colors.text,
     fontWeight: "600",
+  },
+  orderName: {
+    fontSize: 30,
+    color: theme.colors.text,
+    fontWeight: "bold",
+  },
+  timestamp: {
+    fontSize: 14,
+    color: theme.colors.mutedText,
+  },
+  status: {
+    fontSize: 14,
+    color: theme.colors.mutedText,
+    textAlign: "center",
+    marginBottom: theme.spacing.md,
   },
   orderSubText: {
     fontSize: 14,
@@ -239,13 +307,16 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     justifyContent: "center",
+    alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.3)",
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   modalContent: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
     padding: theme.spacing.lg,
+    width: '90%',
+
   },
   detailText: {
     fontSize: 16,

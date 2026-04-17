@@ -1,30 +1,34 @@
-import { useState } from "react";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import AppButton from "../components/AppButton";
-import {
-  buildInitialValues,
-  validateFieldSet,
-} from "../validators/volunteerValidators";
-import { styles } from "../styles/volunteerSignUpSignIn.styles";
+import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { supabase } from "../services/supabase";
+import { styles } from "../styles/volunteerSignUpSignIn.styles";
+import {
+    buildInitialValues,
+    isValidEmail,
+    validateFieldSet,
+} from "../validators/volunteerValidators";
 
 const FIELDS = [
   {
-    key: "identifier",
-    label: "Email or Username",
-    placeholder: "Enter your email or username",
+    key: "email",
+    label: "Email",
+    placeholder: "Enter your email address",
     required: true,
     autoCapitalize: "none",
     keyboardType: "email-address",
+    validate: (value) =>
+      isValidEmail(value) ? null : "Enter a valid email address.",
   },
   {
     key: "password",
@@ -65,35 +69,31 @@ export default function SignInScreen() {
 
     setSubmitState("loading");
 
-    const { identifier, password } = formValues;
+    const { email, password } = formValues;
 
-    // Determine if identifier is an email or username
-    const isEmail = identifier.includes("@");
-    let email = identifier;
-
-    if (!isEmail) {
-      // Look up email by username in volunteers table
-      const { data, error } = await supabase
-        .from("volunteers")
-        .select("email")
-        .eq("username", identifier)
-        .single();
-
-      if (error || !data) {
-        setErrors({ general: "No account found with that username." });
-        setSubmitState("idle");
-        return;
-      }
-
-      email = data.email;
-    }
-
-    // Sign in via Supabase auth
     const { data: authData, error: authError } =
       await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
       setErrors({ general: "Invalid credentials. Please try again." });
+      setSubmitState("idle");
+      return;
+    }
+
+    const volunteerProfileResult = await ensureVolunteerProfile({
+      supabase,
+      user: authData.user,
+    });
+
+    if (
+      volunteerProfileResult.status === "error" ||
+      volunteerProfileResult.status === "incomplete"
+    ) {
+      setErrors({
+        general:
+          volunteerProfileResult.message ||
+          "Unable to restore your volunteer profile.",
+      });
       setSubmitState("idle");
       return;
     }
