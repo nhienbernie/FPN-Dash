@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
+import * as Location from "expo-location";
 import {
   Alert,
   Modal,
@@ -10,7 +11,10 @@ import {
 } from "react-native";
 import AppButton from "../components/AppButton";
 import { useOrdersFeedSubscription } from "../lib/orderRealtime";
-import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
+import {
+  parseOrderNotes,
+  updateOrderTracking,
+} from "../lib/orderSelectionWorkaround";
 import {
   ACTIVE_VOLUNTEER_STATUSES,
   canTransition,
@@ -31,7 +35,40 @@ export default function VolunteerDashboard() {
   const [userId, setUserId] = useState(null);
   const [hasVolunteerProfile, setHasVolunteerProfile] = useState(true);
   const [profileMessage, setProfileMessage] = useState("");
+  const [locationSyncMessage, setLocationSyncMessage] = useState("");
   const router = useRouter();
+
+  const buildTrackedNotes = useCallback(async (notes, statusToShare) => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        setLocationSyncMessage(
+          "Location access is off, so requester ETA updates are unavailable.",
+        );
+        return notes;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      setLocationSyncMessage("Requester ETA updated from your current location.");
+
+      return updateOrderTracking(notes, {
+        volunteerCoords: {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          capturedAt: new Date().toISOString(),
+          sharedForStatus: statusToShare,
+        },
+      });
+    } catch (error) {
+      console.error("Error capturing volunteer location:", error);
+      setLocationSyncMessage("We could not refresh your location just now.");
+      return notes;
+    }
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -107,6 +144,9 @@ export default function VolunteerDashboard() {
 
     setAvailableOrders((pendingOrders || []).map(normalizeOrder));
     setActiveOrder(volunteerOrder ? normalizeOrder(volunteerOrder) : null);
+    if (!volunteerOrder) {
+      setLocationSyncMessage("");
+    }
     setLoading(false);
   }, []);
 
@@ -147,11 +187,17 @@ export default function VolunteerDashboard() {
 
     setSubmitting(true);
     try {
+      const nextNotes = await buildTrackedNotes(
+        selectedOrder.notes,
+        ORDER_STATUS.ACCEPTED,
+      );
+
       const { data, error } = await supabase
         .from("orders")
         .update({
           status: ORDER_STATUS.ACCEPTED,
           volunteer_uid: userId,
+          notes: nextNotes,
         })
         .eq("order_id", selectedOrder.order_id)
         .eq("status", ORDER_STATUS.PENDING)
@@ -193,9 +239,17 @@ export default function VolunteerDashboard() {
 
     setSubmitting(true);
     try {
+      const nextNotes =
+        nextStatus === ORDER_STATUS.DELIVERED
+          ? activeOrder.notes
+          : await buildTrackedNotes(activeOrder.notes, nextStatus);
+
       const { data, error } = await supabase
         .from("orders")
-        .update({ status: nextStatus })
+        .update({
+          status: nextStatus,
+          notes: nextNotes,
+        })
         .eq("order_id", activeOrder.order_id)
         .eq("volunteer_uid", userId)
         .eq("status", activeOrder.status)
@@ -213,6 +267,36 @@ export default function VolunteerDashboard() {
           "Order Changed",
           "This delivery changed in another session. Refreshing your dashboard.",
         );
+      }
+
+      fetchOrders();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSyncActiveLocation = async () => {
+    if (!activeOrder || !userId) return;
+
+    setSubmitting(true);
+    try {
+      const nextNotes = await buildTrackedNotes(activeOrder.notes, activeOrder.status);
+
+      if (nextNotes === activeOrder.notes) {
+        return;
+      }
+
+      const { error } = await supabase
+        .from("orders")
+        .update({ notes: nextNotes })
+        .eq("order_id", activeOrder.order_id)
+        .eq("volunteer_uid", userId)
+        .eq("status", activeOrder.status);
+
+      if (error) {
+        console.error("Error refreshing volunteer ETA:", error);
+        Alert.alert("Error", "Unable to refresh the requester ETA right now.");
+        return;
       }
 
       fetchOrders();
@@ -273,6 +357,7 @@ export default function VolunteerDashboard() {
 
   const activeStatusMeta = getOrderStatusMeta(activeOrder?.status);
   const activeParsedNotes = parseOrderNotes(activeOrder?.notes);
+  const activeTracking = activeParsedNotes.tracking?.volunteerCoords;
 
   return (
     <View style={styles.container}>
@@ -316,13 +401,31 @@ export default function VolunteerDashboard() {
                   Notes: {activeParsedNotes.userNotes}
                 </Text>
               ) : null}
+              {activeTracking?.capturedAt ? (
+                <Text style={styles.orderMeta}>
+                  ETA last updated:{" "}
+                  {new Date(activeTracking.capturedAt).toLocaleTimeString()}
+                </Text>
+              ) : null}
               <Text style={styles.orderHint}>{activeStatusMeta.description}</Text>
+              {locationSyncMessage ? (
+                <Text style={styles.orderHint}>{locationSyncMessage}</Text>
+              ) : null}
               <AppButton
                 title="View Delivery Details"
                 onPress={openDeliveryDetails}
                 variant="secondary"
                 style={styles.cardButton}
               />
+              {ACTIVE_VOLUNTEER_STATUSES.includes(activeOrder.status) ? (
+                <AppButton
+                  title="Update ETA"
+                  onPress={handleSyncActiveLocation}
+                  disabled={submitting}
+                  variant="secondary"
+                  style={styles.cardButton}
+                />
+              ) : null}
               {activeOrder.status === ORDER_STATUS.ACCEPTED ? (
                 <AppButton
                   title="Start Delivery"

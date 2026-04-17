@@ -4,7 +4,10 @@ import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AppButton from "../components/AppButton";
 import ReportConcernModal from "../components/ReportConcernModal";
-import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
+import {
+  parseOrderNotes,
+  updateOrderTracking,
+} from "../lib/orderSelectionWorkaround";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -64,9 +67,13 @@ export default function ConfirmDelivery() {
   const handleCancelDelivery = async () => {
     if (!orderDetails.order_id) return;
 
+    const nextNotes = updateOrderTracking(orderDetails.notes, {
+      volunteerCoords: null,
+    });
+
     const { error } = await supabase
       .from("orders")
-      .update({ status: "pending", volunteer_uid: null })
+      .update({ status: "pending", volunteer_uid: null, notes: nextNotes })
       .eq("order_id", orderDetails.order_id);
 
     if (error) {

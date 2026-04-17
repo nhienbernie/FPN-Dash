@@ -4,7 +4,6 @@
 // it mirrors the logic in `confirm-delivery` to compute the correct host.
 
 import * as Location from "expo-location";
-import { Platform } from "react-native";
 
 export async function lookupAddress(address) {
   if (!address) return null;
