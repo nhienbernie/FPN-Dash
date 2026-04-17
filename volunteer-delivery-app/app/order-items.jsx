@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import AppButton from "../components/AppButton";
 import { supabase } from "../services/supabase";
+import { ORDER_STATUS } from "../lib/orderStatus";
 import { theme } from "../theme";
 
 const CATEGORY_SUBTITLES = {
@@ -87,7 +88,7 @@ export default function OrderItems() {
           customer_uid: customer.uid,
           name: customer.first_name,
           delivery_address: customer.address,
-          status: "pending",
+          status: ORDER_STATUS.PENDING,
           notes: notes.trim() || null,
         })
         .select("order_id")
@@ -137,7 +138,7 @@ export default function OrderItems() {
     <View style={styles.outerContainer}>
       <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Select Items</Text>
-      <Text style={styles.subtitle}>Choose what you'd like in your order</Text>
+      <Text style={styles.subtitle}>Choose what you&apos;d like in your order</Text>
 
       {categories.map(({ label, items }) => (
         <View key={label} style={styles.categoryBlock}>

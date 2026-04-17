@@ -21,12 +21,13 @@ export default function OrderFood() {
 
         const { data: order } = await supabase
           .from("orders")
-          .select("order_id")
+          .select("order_id, status, created_at")
           .eq("customer_uid", user.id)
-          .single();
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
         if (order) {
-          // Already has an active order — skip straight to status
           router.replace("/order-status");
         }
 

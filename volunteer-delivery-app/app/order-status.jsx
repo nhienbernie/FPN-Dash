@@ -1,9 +1,63 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
+import { useOrderSubscription } from "../lib/orderRealtime";
+import {
+  canCancelOrder,
+  getOrderStatusMeta,
+  normalizeOrder,
+  normalizeOrderStatus,
+  ORDER_PROGRESS_STAGES,
+  ORDER_STATUS,
+} from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
+
+function OrderProgress({ status }) {
+  const normalizedStatus = normalizeOrderStatus(status);
+  const currentStep = getOrderStatusMeta(normalizedStatus).stepIndex;
+
+  return (
+    <View style={styles.progressContainer}>
+      {ORDER_PROGRESS_STAGES.map((stage, index) => {
+        const meta = getOrderStatusMeta(stage);
+        const isComplete = index <= currentStep;
+        const isCurrent = index === currentStep;
+
+        return (
+          <View key={stage} style={styles.progressStep}>
+            <View
+              style={[
+                styles.progressDot,
+                {
+                  backgroundColor: isComplete
+                    ? meta.accentColor
+                    : theme.colors.background,
+                  borderColor: meta.borderColor,
+                },
+                isCurrent ? styles.progressDotCurrent : null,
+              ]}
+            />
+            {index < ORDER_PROGRESS_STAGES.length - 1 ? (
+              <View
+                style={[
+                  styles.progressLine,
+                  {
+                    backgroundColor: isComplete
+                      ? meta.accentColor
+                      : theme.colors.border,
+                  },
+                ]}
+              />
+            ) : null}
+            <Text style={styles.progressLabel}>{meta.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function OrderStatus() {
   const [order, setOrder] = useState(null);
@@ -15,18 +69,29 @@ export default function OrderStatus() {
     return address || "";
   };
 
-  const fetchOrder = async () => {
+  const applyOrder = useCallback((nextOrder) => {
+    setOrder(nextOrder ? normalizeOrder(nextOrder) : null);
+  }, []);
+
+  const fetchOrder = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        applyOrder(null);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("orders")
         .select("order_id, status, created_at, notes, order_items(item_id, items(label))")
         .eq("customer_uid", user.id)
-        .single();
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (!error && data) setOrder(data);
+      if (!error) {
+        applyOrder(data);
+      }
 
       // Fetch address
       const { data: customer } = await supabase
@@ -42,11 +107,23 @@ export default function OrderStatus() {
     } finally {
       setInitializing(false);
     }
-  };
+  }, [applyOrder]);
 
   useEffect(() => {
     fetchOrder();
-  }, []);
+  }, [fetchOrder]);
+
+  useOrderSubscription({
+    orderId: order?.order_id,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        applyOrder(null);
+        return;
+      }
+
+      fetchOrder();
+    },
+  });
 
   const handleCancelOrder = async () => {
     if (!order) return;
@@ -80,6 +157,14 @@ export default function OrderStatus() {
 
   if (initializing) return null;
 
+  const selectedItems = (order?.order_items ?? [])
+    .map((r) => r.items?.label)
+    .filter(Boolean);
+  const statusMeta = getOrderStatusMeta(order?.status);
+  const showCancelAction = order && canCancelOrder(order.status);
+  const showDeliveredActions = order?.status === ORDER_STATUS.DELIVERED;
+  const disableCancelAction = order && !showCancelAction && !showDeliveredActions;
+
   if (!order) {
     return (
       <View style={styles.container}>
@@ -99,17 +184,23 @@ export default function OrderStatus() {
     );
   }
 
-  const selectedItems = (order.order_items ?? [])
-    .map((r) => r.items?.label)
-    .filter(Boolean);
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Order Status</Text>
 
-      <View style={styles.card}>
+      <View
+        style={[
+          styles.card,
+          {
+            backgroundColor: statusMeta.backgroundColor,
+            borderColor: statusMeta.borderColor,
+          },
+        ]}
+      >
         <Text style={styles.label}>Status</Text>
-        <Text style={styles.value}>{order.status}</Text>
+        <Text style={styles.value}>{statusMeta.label}</Text>
+        <Text style={styles.description}>{statusMeta.description}</Text>
+        <OrderProgress status={order.status} />
 
         <Text style={styles.label}>Placed At</Text>
         <Text style={styles.value}>
@@ -137,13 +228,30 @@ export default function OrderStatus() {
         disabled={loading}
         style={styles.button}
       />
-      <AppButton
-        title="Cancel Order"
-        onPress={handleCancelOrder}
-        disabled={loading}
-        variant="secondary"
-        style={styles.button}
-      />
+      {showCancelAction ? (
+        <AppButton
+          title="Cancel Order"
+          onPress={handleCancelOrder}
+          disabled={loading}
+          variant="secondary"
+          style={styles.button}
+        />
+      ) : null}
+      {disableCancelAction ? (
+        <View style={styles.lockedState}>
+          <Text style={styles.lockedStateText}>
+            This order is already being delivered and can no longer be cancelled.
+          </Text>
+        </View>
+      ) : null}
+      {showDeliveredActions ? (
+        <AppButton
+          title="Order Again"
+          onPress={() => router.replace("/order-items")}
+          disabled={loading}
+          style={styles.button}
+        />
+      ) : null}
       {address && (
         <Text style={styles.address}>delivering to {formatAddress(address)}</Text>
       )}
@@ -175,9 +283,7 @@ const styles = StyleSheet.create({
   },
   card: {
     width: "100%",
-    backgroundColor: theme.colors.background,
     borderWidth: 1,
-    borderColor: theme.colors.mutedText + "44",
     borderRadius: 12,
     padding: 20,
     marginBottom: 24,
@@ -195,9 +301,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.text,
   },
+  description: {
+    fontSize: 15,
+    color: theme.colors.text,
+    marginTop: 8,
+    marginBottom: 16,
+  },
   button: {
     width: "100%",
     marginBottom: 12,
+  },
+  progressContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  progressStep: {
+    flex: 1,
+    alignItems: "center",
+    position: "relative",
+  },
+  progressDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    zIndex: 1,
+  },
+  progressDotCurrent: {
+    transform: [{ scale: 1.15 }],
+  },
+  progressLine: {
+    position: "absolute",
+    top: 8,
+    left: "50%",
+    right: "-50%",
+    height: 3,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: theme.colors.mutedText,
+    textAlign: "center",
+    marginTop: 10,
+    paddingHorizontal: 2,
+  },
+  lockedState: {
+    width: "100%",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: "#F8FAFC",
+  },
+  lockedStateText: {
+    fontSize: 15,
+    color: theme.colors.mutedText,
+    textAlign: "center",
   },
   address: {
     fontSize: 16,
@@ -208,7 +369,7 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 16,
     color: theme.colors.primary,
-    textDecorationLine: 'underline',
+    textDecorationLine: "underline",
     marginTop: 16,
     textAlign: "center",
   },

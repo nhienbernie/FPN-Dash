@@ -1,40 +1,38 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  FlatList,
+  Alert,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 import AppButton from "../components/AppButton";
+import { useOrdersFeedSubscription } from "../lib/orderRealtime";
+import {
+  ACTIVE_VOLUNTEER_STATUSES,
+  canTransition,
+  getOrderStatusMeta,
+  normalizeOrder,
+  ORDER_STATUS,
+} from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { theme } from "../theme";
 
 export default function VolunteerDashboard() {
-  const [orders, setOrders] = useState([]);
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [activeOrder, setActiveOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [userId, setUserId] = useState(null);
   const [hasVolunteerProfile, setHasVolunteerProfile] = useState(true);
   const [profileMessage, setProfileMessage] = useState("");
-  const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
   const router = useRouter();
 
-  const timeAgo = (date) => {
-    if (!date) return '';
-    const now = new Date();
-    const diff = now - new Date(date);
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    if (hours > 0) return `${hours} hours ago`;
-    const minutes = Math.floor(diff / (1000 * 60));
-    return `${minutes} minutes ago`;
-  };
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
 
     const {
@@ -48,6 +46,8 @@ export default function VolunteerDashboard() {
       return;
     }
 
+    setUserId(user.id);
+
     const volunteerProfileResult = await ensureVolunteerProfile({
       supabase,
       user,
@@ -59,14 +59,15 @@ export default function VolunteerDashboard() {
     ) {
       console.error(
         "Error ensuring volunteer profile:",
-        volunteerProfileResult.message
+        volunteerProfileResult.message,
       );
       setHasVolunteerProfile(false);
       setProfileMessage(
         volunteerProfileResult.message ||
-          "This account does not have a matching volunteer profile yet."
+          "This account does not have a matching volunteer profile yet.",
       );
-      setOrders([]);
+      setAvailableOrders([]);
+      setActiveOrder(null);
       setLoading(false);
       return;
     }
@@ -75,190 +76,312 @@ export default function VolunteerDashboard() {
     setProfileMessage(
       volunteerProfileResult.status === "created"
         ? "We restored your volunteer profile automatically."
-        : ""
+        : "",
     );
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .or(`status.eq.pending,volunteer_uid.eq.${user.id}`);
+    const [
+      { data: pendingOrders, error: pendingError },
+      { data: volunteerOrder, error: volunteerError },
+    ] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("*")
+        .eq("status", ORDER_STATUS.PENDING)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("orders")
+        .select("*")
+        .eq("volunteer_uid", user.id)
+        .in("status", ACTIVE_VOLUNTEER_STATUSES)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-    if (error) {
-      console.error("Error fetching orders:", error);
-    } else {
-      // Sort orders: pending first, then awaiting delivery, then delivered
-      const sortedData = data.sort((a, b) => {
-        const statusOrder = { pending: 1, "awaiting delivery": 2, delivered: 3 };
-        return statusOrder[a.status] - statusOrder[b.status];
-      });
-      setOrders(sortedData);
+    if (pendingError || volunteerError) {
+      console.error("Error fetching orders:", pendingError || volunteerError);
+      setLoading(false);
+      return;
     }
+
+    setAvailableOrders((pendingOrders || []).map(normalizeOrder));
+    setActiveOrder(volunteerOrder ? normalizeOrder(volunteerOrder) : null);
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [fetchOrders]);
 
-  // when selectedOrder is set, show modal and slide up
-  useEffect(() => {
-    if (selectedOrder) {
-      setModalVisible(true);
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+  useOrdersFeedSubscription({
+    volunteerUid: userId,
+    onChange: () => {
+      fetchOrders();
+    },
+  });
+
+  const acceptDisabled = useMemo(
+    () => Boolean(activeOrder) || submitting,
+    [activeOrder, submitting],
+  );
+
+  const handleAcceptOrder = async () => {
+    if (!selectedOrder || !userId) return;
+
+    if (!hasVolunteerProfile) {
+      Alert.alert(
+        "Volunteer Profile Missing",
+        "This signed-in account does not have a matching volunteer profile in the database. Please sign up as a volunteer first, or use a volunteer account that already has a saved profile.",
+      );
+      return;
     }
-  }, [selectedOrder, slideAnim]);
 
-  const handleClose = () => {
-    // slide down then hide
-    Animated.timing(slideAnim, {
-      toValue: Dimensions.get("window").height,
-      duration: 200,
-      useNativeDriver: true,
-    }).start(() => {
-      setModalVisible(false);
+    if (activeOrder) {
+      Alert.alert(
+        "Active Delivery In Progress",
+        "Finish your current delivery before accepting another order.",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .update({
+          status: ORDER_STATUS.ACCEPTED,
+          volunteer_uid: userId,
+        })
+        .eq("order_id", selectedOrder.order_id)
+        .eq("status", ORDER_STATUS.PENDING)
+        .is("volunteer_uid", null)
+        .select("*")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error accepting order:", error);
+        Alert.alert("Error", "Unable to accept this order right now.");
+        return;
+      }
+
+      if (!data) {
+        Alert.alert(
+          "Order Unavailable",
+          "Another volunteer already accepted this order.",
+        );
+        return;
+      }
+
       setSelectedOrder(null);
+      fetchOrders();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleAdvanceActiveOrder = async (nextStatus) => {
+    if (!activeOrder || !userId) return;
+
+    if (!canTransition(activeOrder.status, nextStatus)) {
+      Alert.alert(
+        "Invalid Status Change",
+        "That delivery update is not allowed.",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .update({ status: nextStatus })
+        .eq("order_id", activeOrder.order_id)
+        .eq("volunteer_uid", userId)
+        .eq("status", activeOrder.status)
+        .select("*")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error updating active order:", error);
+        Alert.alert("Error", "Unable to update the delivery right now.");
+        return;
+      }
+
+      if (!data) {
+        Alert.alert(
+          "Order Changed",
+          "This delivery changed in another session. Refreshing your dashboard.",
+        );
+      }
+
+      fetchOrders();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openDeliveryDetails = () => {
+    if (!activeOrder) return;
+
+    router.push({
+      pathname: "/confirm-delivery",
+      params: {
+        name: activeOrder.name,
+        address: activeOrder.delivery_address,
+        order: JSON.stringify(activeOrder),
+      },
     });
   };
 
-  const renderItem = ({ item }) => {
-    const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
-    const isUrgent = item.status === "pending" && item.created_at && (new Date() - new Date(item.created_at)) > 2 * 60 * 60 * 1000;
-    const isDelivered = item.status === "delivered";
-    const backgroundColor = isAccepted ? "#FD9A3A" : isUrgent ? "#ff572d" : isDelivered ? "#90EE90" : "#FEF3C7";
+  const renderAvailableOrder = (order) => {
+    const statusMeta = getOrderStatusMeta(order.status);
 
     return (
-      <View style={[styles.orderItem, { backgroundColor }]}>
-        <View style={styles.topRow}>
-          <Text style={styles.orderName}>{item.name}</Text>
-          <Text style={[styles.timestamp, isUrgent && { color: '#000000' }]}>
-            {item.created_at
-              ? timeAgo(item.created_at)
-              : ""}
-          </Text>
-        </View>
-        <Text style={[styles.status, isUrgent && { color: '#000000', fontWeight: 'bold' }]}>
-          {isUrgent ? "Status: Urgent" : item.status}
+      <View
+        key={order.order_id}
+        style={[
+          styles.orderCard,
+          {
+            backgroundColor: statusMeta.backgroundColor,
+            borderColor: statusMeta.borderColor,
+          },
+        ]}
+      >
+        <Text style={styles.orderName}>{order.name}</Text>
+        <Text style={styles.orderMeta}>
+          Requested:{" "}
+          {order.created_at ? new Date(order.created_at).toLocaleString() : ""}
         </Text>
-        {!isDelivered && (
-          <AppButton
-            title={isAccepted ? "Accepted" : "Accept"}
-            variant={isAccepted ? "secondary" : "primary"}
-            style={{ backgroundColor: 'black' }}  // Custom background color
-            textStyle={{ color: 'white' }}      // Custom text color
-            onPress={() => setSelectedOrder(item)}
-          />
-        )}
+        <Text style={styles.orderMeta}>Status: {statusMeta.label}</Text>
+        <AppButton
+          title={acceptDisabled ? "Finish active delivery first" : "Accept"}
+          variant={acceptDisabled ? "secondary" : "primary"}
+          disabled={acceptDisabled}
+          onPress={() => setSelectedOrder(order)}
+          style={styles.cardButton}
+        />
       </View>
     );
   };
 
+  const activeStatusMeta = getOrderStatusMeta(activeOrder?.status);
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Orders</Text>
-      {hasVolunteerProfile && profileMessage ? (
-        <Text style={styles.status}>{profileMessage}</Text>
-      ) : null}
-      {loading ? (
-        <Text>Loading…</Text>
-      ) : !hasVolunteerProfile ? (
-        <Text style={styles.status}>
-          {profileMessage ||
-            "This account is signed in, but it does not have a matching volunteer profile in the database yet."}
-        </Text>
-      ) : (
-        <FlatList
-          data={orders}
-          keyExtractor={(o) => o.order_id || Math.random().toString()}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 100 }}
-        />
-      )}
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Volunteer Dashboard</Text>
+        {hasVolunteerProfile && profileMessage ? (
+          <Text style={styles.emptyText}>{profileMessage}</Text>
+        ) : null}
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>My Active Delivery</Text>
+          {loading ? (
+            <Text style={styles.emptyText}>Loading your delivery status...</Text>
+          ) : !hasVolunteerProfile ? (
+            <Text style={styles.emptyText}>
+              {profileMessage ||
+                "This account is signed in, but it does not have a matching volunteer profile in the database yet."}
+            </Text>
+          ) : activeOrder ? (
+            <View
+              style={[
+                styles.activeCard,
+                {
+                  backgroundColor: activeStatusMeta.backgroundColor,
+                  borderColor: activeStatusMeta.borderColor,
+                },
+              ]}
+            >
+              <Text style={styles.orderName}>{activeOrder.name}</Text>
+              <Text style={styles.orderMeta}>Status: {activeStatusMeta.label}</Text>
+              <Text style={styles.orderMeta}>
+                Address: {activeOrder.delivery_address}
+              </Text>
+              <Text style={styles.orderHint}>{activeStatusMeta.description}</Text>
+              <AppButton
+                title="View Delivery Details"
+                onPress={openDeliveryDetails}
+                variant="secondary"
+                style={styles.cardButton}
+              />
+              {activeOrder.status === ORDER_STATUS.ACCEPTED ? (
+                <AppButton
+                  title="Start Delivery"
+                  onPress={() => handleAdvanceActiveOrder(ORDER_STATUS.IN_TRANSIT)}
+                  disabled={submitting}
+                  style={styles.cardButton}
+                />
+              ) : null}
+              {activeOrder.status === ORDER_STATUS.IN_TRANSIT ? (
+                <AppButton
+                  title="Mark Delivered"
+                  onPress={() => handleAdvanceActiveOrder(ORDER_STATUS.DELIVERED)}
+                  disabled={submitting}
+                  style={styles.cardButton}
+                />
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>
+              You do not have an active delivery right now.
+            </Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Available Orders</Text>
+          {loading ? (
+            <Text style={styles.emptyText}>Loading available orders...</Text>
+          ) : !hasVolunteerProfile ? (
+            <Text style={styles.emptyText}>
+              Order acceptance is disabled until this account has a matching
+              volunteer profile.
+            </Text>
+          ) : availableOrders.length > 0 ? (
+            availableOrders.map(renderAvailableOrder)
+          ) : (
+            <Text style={styles.emptyText}>No pending orders are waiting right now.</Text>
+          )}
+        </View>
+      </ScrollView>
 
       <Modal
-        visible={modalVisible}
+        visible={Boolean(selectedOrder)}
         transparent
-        animationType="none"
-        onRequestClose={handleClose}
+        animationType="fade"
+        onRequestClose={() => setSelectedOrder(null)}
       >
-        {/* overlay + container center the content */}
-        <View style={styles.modalContainer}>
-          <Animated.View
-            style={[
-              styles.modalContent,
-              { transform: [{ translateY: slideAnim }] },
-            ]}
-          >
-            {selectedOrder && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Confirm Acceptance</Text>
+            {selectedOrder ? (
               <>
-                <Text style={styles.detailText}>
-                  Name: {selectedOrder.name}
+                <Text style={styles.modalText}>Name: {selectedOrder.name}</Text>
+                <Text style={styles.modalText}>
+                  Requested:{" "}
+                  {selectedOrder.created_at
+                    ? new Date(selectedOrder.created_at).toLocaleString()
+                    : ""}
                 </Text>
-                <Text style={styles.detailText}>
-                  Status: {selectedOrder.status}
-                </Text>
-                <Text style={styles.detailText}>
+                <Text style={styles.modalText}>
                   Address: {selectedOrder.delivery_address}
                 </Text>
-                <Text style={styles.detailText}>
-                  Item Milk: {selectedOrder.item_milk ? "Yes" : "No"}
-                </Text>
-                <Text style={styles.detailText}>
-                  Item PB: {selectedOrder.item_pb ? "Yes" : "No"}
-                </Text>
-                {
-                <Text style={styles.detailText}>
-                  Item Mac & Cheese: {selectedOrder.item_mac_cheese ? "Yes" : "No"}
-                </Text>
-                }
-                <Text style={styles.detailText}>
-                  Notes: {selectedOrder.notes || "None"}
-                </Text>
               </>
-            )}
-
+            ) : null}
             <AppButton
-              title="Confirm order"
-              onPress={async () => {
-                const { data: { user } } = await supabase.auth.getUser();
-
-                const { error } = await supabase
-                  .from("orders")
-                  .update({ status: "awaiting delivery", volunteer_uid: user.id })
-                  .eq("order_id", selectedOrder.order_id);
-
-                if (error) {
-                  console.error("Error updating order:", error);
-                } else {
-                  fetchOrders();
-                }
-
-                handleClose();
-                if (selectedOrder) {
-                  router.push({
-                    pathname: "/confirm-delivery",
-                    params: {
-                      name: selectedOrder.name,
-                      address: selectedOrder.delivery_address,
-                      order: JSON.stringify(selectedOrder),
-                    },
-                  });
-                } else {
-                  router.push("/confirm-delivery");
-                }
-              }}
+              title="Accept Order"
+              onPress={handleAcceptOrder}
+              disabled={submitting}
+              style={styles.cardButton}
             />
-
             <AppButton
               title="Close"
               variant="secondary"
-              style={{ marginTop: theme.spacing.md }}
-              onPress={handleClose}
+              onPress={() => setSelectedOrder(null)}
+              style={styles.cardButton}
             />
-          </Animated.View>
+          </View>
         </View>
       </Modal>
     </View>
@@ -269,76 +392,82 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
+  },
+  content: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
-    borderWidth: 12,
-    borderColor: "#398288",
-    borderRadius: 55
+    paddingVertical: theme.spacing.lg,
   },
   title: {
     fontSize: 24,
     fontWeight: "700",
     color: theme.colors.text,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
     textAlign: "center",
-    marginTop: 50
   },
-  orderItem: {
-    padding: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.colors.border,
-    // backgroundColor is set dynamically based on status
-    marginBottom: theme.spacing.sm,
-    borderRadius: theme.radius.md,
+  section: {
+    marginBottom: theme.spacing.lg,
   },
-  // top row for name and timestamp
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: theme.colors.text,
     marginBottom: theme.spacing.md,
   },
-  orderText: {
-    fontSize: 16,
-    color: theme.colors.text,
-    fontWeight: "600",
+  activeCard: {
+    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.lg,
+  },
+  orderCard: {
+    borderWidth: 1,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   orderName: {
-    fontSize: 30,
+    fontSize: 18,
+    fontWeight: "700",
     color: theme.colors.text,
-    fontWeight: "bold",
+    marginBottom: theme.spacing.sm,
   },
-  timestamp: {
+  orderMeta: {
     fontSize: 14,
     color: theme.colors.mutedText,
+    marginBottom: theme.spacing.sm,
   },
-  status: {
+  orderHint: {
     fontSize: 14,
-    color: theme.colors.mutedText,
-    textAlign: "center",
+    color: theme.colors.text,
     marginBottom: theme.spacing.md,
   },
-  orderSubText: {
-    fontSize: 14,
+  emptyText: {
+    fontSize: 15,
     color: theme.colors.mutedText,
-    // marginBottom moved to orderRow for spacing
+    lineHeight: 22,
   },
-  modalContainer: {
+  cardButton: {
+    width: "100%",
+    marginTop: theme.spacing.sm,
+  },
+  modalOverlay: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
-    padding: theme.spacing.md,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    padding: theme.spacing.lg,
   },
-  modalContent: {
+  modalCard: {
     backgroundColor: theme.colors.background,
     borderRadius: theme.radius.md,
     padding: theme.spacing.lg,
-    width: '90%',
-
   },
-  detailText: {
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  modalText: {
+    fontSize: 15,
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
   },
