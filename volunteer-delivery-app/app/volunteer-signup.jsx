@@ -1,22 +1,22 @@
-import { useRouter } from "expo-router";
 import { useState } from "react";
+import { useRouter } from "expo-router";
+import { supabase } from "../services/supabase";
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import AppButton from "../components/AppButton";
-import { supabase } from "../services/supabase";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import {
-    buildInitialValues,
-    digitsOnly,
-    isValidEmail,
-    isValidZip,
-    validateFieldSet,
+  buildInitialValues,
+  digitsOnly,
+  isValidEmail,
+  isValidZip,
+  validateFieldSet,
 } from "../validators/volunteerValidators";
 
 const FIELDS = [
@@ -182,6 +182,15 @@ export default function VolunteerSignupScreen() {
         return;
       }
 
+      if (!authData?.user?.id) {
+        setErrors({
+          general:
+            "Account creation did not finish successfully. Please try again.",
+        });
+        setSubmitState("idle");
+        return;
+      }
+
       const { error: profileError } = await supabase.from("volunteers").insert({
         uid: authData.user.id,
         first_name: formValues.firstName,
@@ -202,7 +211,7 @@ export default function VolunteerSignupScreen() {
       setSubmitState("success");
       router.replace("/volunteer-dashboard");
     } catch (_error) {
-      setErrors({ email: "Something went wrong. Please try again." });
+      setErrors({ general: "Something went wrong. Please try again." });
       setSubmitState("idle");
     }
   };

@@ -22,6 +22,14 @@ export const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 16,
   },
+  errorBanner: {
+    backgroundColor: "#FEF3F2",
+    borderWidth: 1,
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.md,
+    padding: 12,
+    marginBottom: 16,
+  },
   successText: {
     color: theme.colors.successText,
     fontSize: 14,

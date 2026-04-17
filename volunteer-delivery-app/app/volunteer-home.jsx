@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { theme } from "../theme";
 
-export default function volunteerHome() {
+export default function VolunteerHome() {
   const router = useRouter();
 
   return (
