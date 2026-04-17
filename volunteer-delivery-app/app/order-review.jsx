@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -17,9 +17,10 @@ import { theme } from "../theme";
 export default function OrderReview() {
   const params = useLocalSearchParams();
   const boxCount = parseInt(params.boxCount) || 1;
-  const allSelections = params.allSelections
-    ? JSON.parse(params.allSelections)
-    : [];
+  const allSelections = useMemo(
+    () => (params.allSelections ? JSON.parse(params.allSelections) : []),
+    [params.allSelections],
+  );
 
   const [notes, setNotes] = useState("");
   const [itemLabels, setItemLabels] = useState({});
@@ -50,7 +51,7 @@ export default function OrderReview() {
     };
 
     fetchLabels();
-  }, []);
+  }, [allSelections]);
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -152,7 +153,7 @@ export default function OrderReview() {
     <View style={styles.outerContainer}>
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Review Order</Text>
-        <Text style={styles.subtitle}>Confirm what's in each box</Text>
+        <Text style={styles.subtitle}>Confirm what&apos;s in each box</Text>
 
         {Array.from({ length: boxCount }, (_, i) => {
           const boxItems = allSelections[i] ?? [];

@@ -105,7 +105,7 @@ export default function OrderItems() {
           Box {currentBox} of {boxCount}
         </Text>
         <Text style={styles.title}>Select Items</Text>
-        <Text style={styles.subtitle}>Choose what you'd like in this box</Text>
+        <Text style={styles.subtitle}>Choose what you&apos;d like in this box</Text>
 
         {categories.map(({ label, items }) => (
           <View key={label} style={styles.categoryBlock}>

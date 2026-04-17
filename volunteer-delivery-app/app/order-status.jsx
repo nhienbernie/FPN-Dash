@@ -2,6 +2,13 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
+import {
+  calculateDistanceMiles,
+  estimateTravelMinutes,
+  formatDistanceMiles,
+  formatEtaMinutes,
+  hasCoordinates,
+} from "../lib/deliveryTracking";
 import { useOrderSubscription } from "../lib/orderRealtime";
 import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import {
@@ -12,6 +19,7 @@ import {
     ORDER_PROGRESS_STAGES,
     ORDER_STATUS,
 } from "../lib/orderStatus";
+import { lookupAddress } from "../services/geocode";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -63,6 +71,9 @@ export default function OrderStatus() {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [address, setAddress] = useState(null);
+  const [deliveryEstimate, setDeliveryEstimate] = useState({
+    state: "idle",
+  });
 
   const applyOrder = useCallback((order) => {
     setOrder(order ? normalizeOrder(order) : null);
@@ -161,7 +172,8 @@ export default function OrderStatus() {
     () => getOrderStatusMeta(order?.status),
     [order?.status]
   );
-  const parsedNotes = parseOrderNotes(order?.notes);
+  const parsedNotes = useMemo(() => parseOrderNotes(order?.notes), [order?.notes]);
+  const volunteerCoords = parsedNotes.tracking?.volunteerCoords ?? null;
   const orderTime = order?.created_at
     ? new Date(order.created_at)
     : null;
@@ -169,6 +181,64 @@ export default function OrderStatus() {
   const showCancelAction = order && canCancelOrder(order.status);
   const disableCancelAction =
     order && !showCancelAction && !showDeliveredActions;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDeliveryEstimate = async () => {
+      if (!order) {
+        setDeliveryEstimate({ state: "idle" });
+        return;
+      }
+
+      if (order.status === ORDER_STATUS.PENDING) {
+        setDeliveryEstimate({ state: "waiting_volunteer" });
+        return;
+      }
+
+      if (order.status === ORDER_STATUS.DELIVERED) {
+        setDeliveryEstimate({ state: "delivered" });
+        return;
+      }
+
+      if (!hasCoordinates(volunteerCoords)) {
+        setDeliveryEstimate({ state: "waiting_location" });
+        return;
+      }
+
+      setDeliveryEstimate({ state: "loading" });
+
+      const deliveryCoords = await lookupAddress(order.delivery_address || address);
+      if (cancelled) {
+        return;
+      }
+
+      if (!hasCoordinates(deliveryCoords)) {
+        setDeliveryEstimate({ state: "address_unavailable" });
+        return;
+      }
+
+      const distanceMiles = calculateDistanceMiles(volunteerCoords, deliveryCoords);
+      const etaMinutes = estimateTravelMinutes(distanceMiles);
+
+      setDeliveryEstimate({
+        state: "ready",
+        distanceMiles,
+        etaMinutes,
+        capturedAt: volunteerCoords.capturedAt,
+      });
+    };
+
+    loadDeliveryEstimate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    address,
+    order,
+    volunteerCoords,
+  ]);
 
   if (initializing) return null;
 
@@ -222,6 +292,49 @@ export default function OrderStatus() {
         <Text style={styles.statusLabel}>Status: {statusMeta.label}</Text>
         <Text style={styles.statusDescription}>{statusMeta.description}</Text>
         <OrderProgress status={order.status} />
+
+        {deliveryEstimate.state !== "delivered" ? (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailSectionTitle}>Delivery ETA</Text>
+            {deliveryEstimate.state === "ready" ? (
+              <>
+                <Text style={styles.detailHeading}>
+                  Volunteer is {formatDistanceMiles(deliveryEstimate.distanceMiles)} away
+                </Text>
+                <Text style={styles.detailText}>
+                  Estimated arrival: {formatEtaMinutes(deliveryEstimate.etaMinutes)}
+                </Text>
+                {deliveryEstimate.capturedAt ? (
+                  <Text style={styles.detailText}>
+                    Last updated:{" "}
+                    {new Date(deliveryEstimate.capturedAt).toLocaleTimeString()}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+            {deliveryEstimate.state === "waiting_volunteer" ? (
+              <Text style={styles.detailText}>
+                We&apos;ll show distance and ETA once a volunteer accepts your order.
+              </Text>
+            ) : null}
+            {deliveryEstimate.state === "waiting_location" ? (
+              <Text style={styles.detailText}>
+                A volunteer accepted your order. ETA will appear after they share
+                their current location.
+              </Text>
+            ) : null}
+            {deliveryEstimate.state === "loading" ? (
+              <Text style={styles.detailText}>
+                Calculating the latest delivery distance...
+              </Text>
+            ) : null}
+            {deliveryEstimate.state === "address_unavailable" ? (
+              <Text style={styles.detailText}>
+                We couldn&apos;t calculate the route for this delivery address yet.
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {boxDetails.length > 0 ? (
           <View style={styles.detailSection}>
