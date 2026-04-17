@@ -1,19 +1,39 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
 import {
   StyleSheet,
   Text,
   View,
   FlatList,
   Modal,
-  TouchableOpacity,
   Animated,
   Dimensions,
 } from "react-native";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 import AppButton from "../components/AppButton";
+
+const DEMO_API_URL = process.env.EXPO_PUBLIC_DEMO_API_URL || "http://localhost:4000";
+
+async function notifyCustomerBySms(customerUid, message) {
+  try {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("phone_number, first_name")
+      .eq("uid", customerUid)
+      .maybeSingle();
+
+    if (!customer?.phone_number) return;
+
+    await fetch(`${DEMO_API_URL}/api/notify/sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: customer.phone_number, message }),
+    });
+  } catch (err) {
+    console.warn("[sms] Failed to notify customer:", err.message);
+  }
+}
 
 export default function VolunteerDashboard() {
   const [orders, setOrders] = useState([]);
@@ -166,6 +186,10 @@ export default function VolunteerDashboard() {
                   console.error("Error updating order:", error);
                 } else {
                   fetchOrders();
+                  await notifyCustomerBySms(
+                    selectedOrder.customer_uid,
+                    `Hi ${selectedOrder.name}, a volunteer has accepted your food pantry delivery and is on the way!`
+                  );
                 }
 
                 handleClose();
