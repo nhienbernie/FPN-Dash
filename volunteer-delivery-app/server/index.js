@@ -61,24 +61,6 @@ const authSupabase = hasSupabaseServerConfig
     })
   : null;
 
-// ── Twilio ────────────────────────────────────────────────────────────────────
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
-const hasTwilio = Boolean(
-  TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER
-);
-
-let twilioClient = null;
-if (hasTwilio) {
-  const twilio = require("twilio");
-  twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-  console.log("[twilio] SMS client initialised");
-} else {
-  console.warn(
-    "[twilio] Missing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER — SMS disabled"
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const normalizePhone = (value = "") => String(value).replace(/\D/g, "");
@@ -236,16 +218,11 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+const TEXTBELT_KEY = process.env.TEXTBELT_KEY || "textbelt";
+
 // Send an SMS notification
 // Body: { to: "15550001234", message: "Your order was accepted!" }
 app.post("/api/notify/sms", async (req, res) => {
-  if (!hasTwilio || !twilioClient) {
-    return res.status(503).json({
-      status: "sms_disabled",
-      message: "Twilio credentials not configured on this server.",
-    });
-  }
-
   const { to, message } = req.body ?? {};
 
   if (!to || !message) {
@@ -263,19 +240,23 @@ app.post("/api/notify/sms", async (req, res) => {
     });
   }
 
-  // E.164 format required by Twilio
-  const e164 = normalised.length === 10 ? `+1${normalised}` : `+${normalised}`;
+  const phone = normalised.length === 10 ? `+1${normalised}` : `+${normalised}`;
 
   try {
-    await twilioClient.messages.create({
-      body: message,
-      from: TWILIO_FROM_NUMBER,
-      to: e164,
+    const tbRes = await fetch("https://textbelt.com/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, message, key: TEXTBELT_KEY }),
     });
-    console.log(`[twilio] SMS sent to ${e164}`);
-    return res.json({ status: "sent", to: e164 });
+    const tbData = await tbRes.json();
+    if (!tbData.success) {
+      console.error("[sms] TextBelt error:", tbData.error);
+      return res.status(500).json({ status: "error", message: tbData.error });
+    }
+    console.log(`[sms] SMS sent to ${phone}, quota remaining: ${tbData.quotaRemaining}`);
+    return res.json({ status: "sent", to: phone });
   } catch (err) {
-    console.error("[twilio] Failed to send SMS:", err.message);
+    console.error("[sms] Failed to send SMS:", err.message);
     return res.status(500).json({ status: "error", message: err.message });
   }
 });

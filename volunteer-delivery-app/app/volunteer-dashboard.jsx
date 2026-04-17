@@ -188,7 +188,7 @@ export default function VolunteerDashboard() {
                   fetchOrders();
                   await notifyCustomerBySms(
                     selectedOrder.customer_uid,
-                    `Hi ${selectedOrder.name}, a volunteer has accepted your food pantry delivery and is on the way!`
+                    `FPN Delivery: Hi ${selectedOrder.name}, a volunteer has accepted your food pantry delivery and is on the way!`
                   );
                 }
 
