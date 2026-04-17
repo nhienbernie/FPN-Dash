@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
+import * as Location from "expo-location";
 import {
   Alert,
   Modal,
@@ -30,6 +31,7 @@ export default function VolunteerDashboard() {
   const [userId, setUserId] = useState(null);
   const [hasVolunteerProfile, setHasVolunteerProfile] = useState(true);
   const [profileMessage, setProfileMessage] = useState("");
+  const locationSubscriptionRef = useRef(null);
   const router = useRouter();
 
   const fetchOrders = useCallback(async () => {
@@ -119,6 +121,108 @@ export default function VolunteerDashboard() {
       fetchOrders();
     },
   });
+
+  const updateVolunteerLocation = useCallback(
+    async (location) => {
+      const orderId = activeOrder?.order_id;
+      if (!orderId || !location?.coords) return;
+
+      const { latitude, longitude } = location.coords;
+      if (!latitude || !longitude) return;
+
+      const tryUpdate = async (latKey, lngKey) => {
+        const { error } = await supabase
+          .from("orders")
+          .update({
+            [latKey]: latitude,
+            [lngKey]: longitude,
+          })
+          .eq("order_id", orderId);
+        return { latKey, lngKey, error };
+      };
+
+      const attempts = [
+        ["volunteer_lat", "volunteer_long"],
+        ["volunter_lat", "volunter_long"],
+        ["volunteer_lat", "volunter_long"],
+        ["volunter_lat", "volunteer_long"],
+      ];
+
+      let finalError = null;
+      for (const [latKey, lngKey] of attempts) {
+        const result = await tryUpdate(latKey, lngKey);
+        if (!result.error) {
+          return;
+        }
+        finalError = result.error;
+        const message = result.error.message || "";
+        if (!/Could not find the .* column/.test(message) && result.error.code !== "PGRST204") {
+          break;
+        }
+      }
+
+      if (finalError) {
+        console.error("Failed to update volunteer location after multiple column attempts:", finalError);
+      }
+    },
+    [activeOrder?.order_id]
+  );
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (!activeOrder?.order_id) {
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+      return undefined;
+    }
+
+    const startTracking = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert(
+            "Location Required",
+            "Allow location access so the delivery ETA can update for customers."
+          );
+          return;
+        }
+
+        const currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        await updateVolunteerLocation(currentLocation);
+
+        const subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 15000,
+            distanceInterval: 5,
+          },
+          async (location) => {
+            if (!isCurrent) return;
+            await updateVolunteerLocation(location);
+          }
+        );
+
+        locationSubscriptionRef.current = subscription;
+      } catch (error) {
+        console.error("Volunteer location tracking failed:", error);
+      }
+    };
+
+    startTracking();
+
+    return () => {
+      isCurrent = false;
+      if (locationSubscriptionRef.current) {
+        locationSubscriptionRef.current.remove();
+        locationSubscriptionRef.current = null;
+      }
+    };
+  }, [activeOrder?.order_id, updateVolunteerLocation]);
 
   const acceptDisabled = useMemo(
     () => Boolean(activeOrder) || submitting,

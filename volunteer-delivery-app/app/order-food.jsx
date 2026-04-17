@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import AppButton from "../components/AppButton";
 import { useOrderSubscription } from "../lib/orderRealtime";
+import { lookupAddress } from "../services/geocode";
 import {
   canCancelOrder,
   getOrderStatusMeta,
@@ -59,6 +60,10 @@ function OrderProgress({ status }) {
 export default function OrderFood() {
   const [currentOrder, setCurrentOrder] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [customerLocation, setCustomerLocation] = useState(null);
+  const [etaMinutes, setEtaMinutes] = useState(null);
+  const [etaUpdating, setEtaUpdating] = useState(false);
+  const [etaMessage, setEtaMessage] = useState("");
 
   const applyOrder = useCallback((order) => {
     setCurrentOrder(order ? normalizeOrder(order) : null);
@@ -76,7 +81,7 @@ export default function OrderFood() {
 
     const { data, error } = await supabase
       .from("orders")
-      .select("order_id, status, created_at, customer_uid, volunteer_uid")
+      .select("*")
       .eq("customer_uid", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -105,6 +110,121 @@ export default function OrderFood() {
       applyOrder(payload.new);
     },
   });
+
+  const isValidCoordinate = (value) =>
+    typeof value === "number" && Number.isFinite(value) && value !== 0;
+
+  const getVolunteerCoordinates = (order) => {
+    const lat =
+      order?.volunteer_lat != null
+        ? Number(order.volunteer_lat)
+        : Number(order?.volunter_lat);
+    const lng =
+      order?.volunteer_long != null
+        ? Number(order.volunteer_long)
+        : Number(order?.volunter_long);
+    return { lat, lng };
+  };
+
+  const calculateEtaMinutes = async (
+    volunteerLat,
+    volunteerLng,
+    customerLat,
+    customerLng
+  ) => {
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${volunteerLng},${volunteerLat};${customerLng},${customerLat}?overview=false&alternatives=false&annotations=duration`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const seconds = data?.routes?.[0]?.duration;
+      if (!seconds || !Number.isFinite(seconds)) return null;
+      return Math.max(0, Math.ceil(seconds / 60));
+    } catch (error) {
+      console.error("Error fetching ETA from OSRM:", error);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const resolveAddress = async () => {
+      if (!currentOrder?.delivery_address) {
+        setCustomerLocation(null);
+        return;
+      }
+      const coords = await lookupAddress(currentOrder.delivery_address);
+      if (mounted) {
+        setCustomerLocation(coords);
+        if (!coords) {
+          setEtaMessage("Unable to resolve delivery address.");
+        }
+      }
+    };
+    resolveAddress();
+    return () => {
+      mounted = false;
+    };
+  }, [currentOrder?.delivery_address]);
+
+  useEffect(() => {
+    let mounted = true;
+    let interval = null;
+
+    const updateEta = async () => {
+      if (!currentOrder) {
+        setEtaMinutes(null);
+        setEtaMessage("");
+        return;
+      }
+
+      if (currentOrder.status === ORDER_STATUS.PENDING || !currentOrder.volunteer_uid) {
+        setEtaMinutes(null);
+        setEtaMessage("Waiting for volunteer assignment.");
+        return;
+      }
+
+      if (!customerLocation) {
+        setEtaMinutes(null);
+        setEtaMessage("Looking up delivery address...");
+        return;
+      }
+
+      const { lat: volunteerLat, lng: volunteerLng } = getVolunteerCoordinates(currentOrder);
+      if (!isValidCoordinate(volunteerLat) || !isValidCoordinate(volunteerLng)) {
+        setEtaMinutes(null);
+        setEtaMessage("Volunteer location not available yet.");
+        return;
+      }
+
+      setEtaUpdating(true);
+      const minutes = await calculateEtaMinutes(
+        volunteerLat,
+        volunteerLng,
+        customerLocation.latitude,
+        customerLocation.longitude
+      );
+      if (!mounted) return;
+
+      if (minutes == null) {
+        setEtaMinutes(null);
+        setEtaMessage("Unable to estimate arrival time yet.");
+      } else {
+        setEtaMinutes(minutes);
+        setEtaMessage("");
+      }
+      setEtaUpdating(false);
+    };
+
+    updateEta();
+    if (currentOrder && currentOrder.status !== ORDER_STATUS.DELIVERED) {
+      interval = setInterval(updateEta, 20000);
+    }
+
+    return () => {
+      mounted = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [currentOrder?.order_id, currentOrder?.status, currentOrder?.volunteer_uid, currentOrder?.volunteer_lat, currentOrder?.volunteer_long, currentOrder?.volunter_lat, currentOrder?.volunter_long, customerLocation]);
 
   const handleOrderFood = async () => {
     setLoading(true);
@@ -222,6 +342,13 @@ export default function OrderFood() {
             </Text>
             <Text style={styles.statusLabel}>Status: {statusMeta.label}</Text>
             <Text style={styles.statusDescription}>{statusMeta.description}</Text>
+            <Text style={styles.etaText}>
+              {etaUpdating
+                ? "Estimating driver arrival..."
+                : etaMinutes != null
+                ? `Driver ETA: ${etaMinutes} min`
+                : etaMessage}
+            </Text>
             <OrderProgress status={currentOrder.status} />
           </View>
 
@@ -309,6 +436,13 @@ const styles = StyleSheet.create({
   statusDescription: {
     fontSize: 15,
     color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
+  },
+  etaText: {
+    fontSize: 16,
+    color: theme.colors.primary,
+    fontWeight: "600",
     marginBottom: theme.spacing.lg,
     textAlign: "center",
   },

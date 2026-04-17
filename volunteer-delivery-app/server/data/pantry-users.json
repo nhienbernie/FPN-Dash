@@ -5,11 +5,11 @@
     "firstName": "Demo",
     "lastName": "UserOne",
     "address": {
-      "line1": "100 Demo Way",
+      "line1": "4974 Cadogan Pl",
       "line2": "",
-      "city": "Sampleville",
+      "city": "New Albany",
       "state": "OH",
-      "zip": "43000"
+      "zip": "43054"
     }
   },
   {
@@ -62,6 +62,19 @@
       "city": "Exampleton",
       "state": "OH",
       "zip": "43004"
+    }
+  },
+  {
+    "phone": "6144647335",
+    "dob": "04/30/2004",
+    "firstName": "Beck",
+    "lastName": "Robins",
+    "address": {
+      "line1": "2421 Plymouth Ave",
+      "line2": "",
+      "city": "Columbus",
+      "state": "OH",
+      "zip": "43209"
     }
   }
 ]
