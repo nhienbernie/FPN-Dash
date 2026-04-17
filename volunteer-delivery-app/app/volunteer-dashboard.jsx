@@ -1,15 +1,17 @@
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  View
+    Animated,
+    Dimensions,
+    FlatList,
+    Modal,
+    StyleSheet,
+    Text,
+    View
 } from "react-native";
 import AppButton from "../components/AppButton";
+import { useOrdersFeedSubscription } from "../lib/orderRealtime";
+import { normalizeOrderStatus, ORDER_STATUS } from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -18,8 +20,22 @@ export default function VolunteerDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [user, setUser] = useState(null);
   const slideAnim = useRef(new Animated.Value(Dimensions.get("window").height)).current;
   const router = useRouter();
+
+  const applyOrder = useCallback((order) => {
+    setOrders((prev) => {
+      const existingIndex = prev.findIndex((o) => o.order_id === order.order_id);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = order;
+        return updated;
+      } else {
+        return [...prev, order];
+      }
+    });
+  }, []);
 
   const timeAgo = (date) => {
     if (!date) return '';
@@ -35,6 +51,7 @@ export default function VolunteerDashboard() {
     setLoading(true);
     
     const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
     
     const { data, error } = await supabase
       .from("orders")
@@ -44,10 +61,10 @@ export default function VolunteerDashboard() {
     if (error) {
       console.error("Error fetching orders:", error);
     } else {
-      // Sort orders: pending first, then awaiting delivery, then delivered
+      // Sort orders: pending first, then accepted, then in_transit, then delivered
       const sortedData = data.sort((a, b) => {
-        const statusOrder = { pending: 1, "awaiting delivery": 2, delivered: 3 };
-        return statusOrder[a.status] - statusOrder[b.status];
+        const statusOrder = { [ORDER_STATUS.PENDING]: 1, [ORDER_STATUS.ACCEPTED]: 2, [ORDER_STATUS.IN_TRANSIT]: 3, [ORDER_STATUS.DELIVERED]: 4 };
+        return statusOrder[normalizeOrderStatus(a.status)] - statusOrder[normalizeOrderStatus(b.status)];
       });
       setOrders(sortedData);
     }
@@ -57,6 +74,18 @@ export default function VolunteerDashboard() {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  useOrdersFeedSubscription({
+    volunteerUid: user?.id,
+    onChange: (payload) => {
+      if (payload.eventType === "DELETE") {
+        setOrders((prev) => prev.filter((o) => o.order_id !== payload.old.order_id));
+        return;
+      }
+
+      applyOrder(payload.new);
+    },
+  });
 
   // when selectedOrder is set, show modal and slide up
   useEffect(() => {
@@ -83,10 +112,12 @@ export default function VolunteerDashboard() {
   };
 
   const renderItem = ({ item }) => {
-    const isAccepted = item.status && item.status.toLowerCase() === "awaiting delivery";
-    const isUrgent = item.status === "pending" && item.created_at && (new Date() - new Date(item.created_at)) > 2 * 60 * 60 * 1000;
-    const isDelivered = item.status === "delivered";
-    const backgroundColor = isAccepted ? "#FD9A3A" : isUrgent ? "#ff572d" : isDelivered ? "#90EE90" : "#FEF3C7";
+    const normalizedStatus = normalizeOrderStatus(item.status);
+    const isAccepted = normalizedStatus === ORDER_STATUS.ACCEPTED;
+    const isInTransit = normalizedStatus === ORDER_STATUS.IN_TRANSIT;
+    const isUrgent = normalizedStatus === ORDER_STATUS.PENDING && item.created_at && (new Date() - new Date(item.created_at)) > 2 * 60 * 60 * 1000;
+    const isDelivered = normalizedStatus === ORDER_STATUS.DELIVERED;
+    const backgroundColor = isAccepted ? "#FD9A3A" : isInTransit ? "#7A5AF8" : isUrgent ? "#ff572d" : isDelivered ? "#90EE90" : "#FEF3C7";
 
     return (
       <View style={[styles.orderItem, { backgroundColor }]}>
@@ -99,12 +130,12 @@ export default function VolunteerDashboard() {
           </Text>
         </View>
         <Text style={[styles.status, isUrgent && { color: '#000000', fontWeight: 'bold' }]}>
-          {isUrgent ? "Status: Urgent" : item.status}
+          {isUrgent ? "Status: Urgent" : `Status: ${normalizedStatus}`}
         </Text>
         {!isDelivered && (
           <AppButton
-            title={isAccepted ? "Accepted" : "Accept"}
-            variant={isAccepted ? "secondary" : "primary"}
+            title={isAccepted || isInTransit ? "View Details" : "Accept"}
+            variant={isAccepted || isInTransit ? "secondary" : "primary"}
             style={{ backgroundColor: 'black' }}  // Custom background color
             textStyle={{ color: 'white' }}      // Custom text color
             onPress={() => setSelectedOrder(item)}
@@ -148,7 +179,7 @@ export default function VolunteerDashboard() {
                   Name: {selectedOrder.name}
                 </Text>
                 <Text style={styles.detailText}>
-                  Status: {selectedOrder.status}
+                  Status: {normalizeOrderStatus(selectedOrder.status)}
                 </Text>
                 <Text style={styles.detailText}>
                   Address: {selectedOrder.delivery_address}
@@ -177,7 +208,7 @@ export default function VolunteerDashboard() {
 
                 const { error } = await supabase
                   .from("orders")
-                  .update({ status: "awaiting delivery", volunteer_uid: user.id })
+                  .update({ status: ORDER_STATUS.ACCEPTED, volunteer_uid: user.id })
                   .eq("order_id", selectedOrder.order_id);
 
                 if (error) {

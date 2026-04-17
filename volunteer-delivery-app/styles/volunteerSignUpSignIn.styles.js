@@ -27,6 +27,14 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
+  errorBanner: {
+    backgroundColor: "#FEF3F2",
+    borderWidth: 1,
+    borderColor: theme.colors.danger,
+    borderRadius: theme.radius.md,
+    padding: 12,
+    marginBottom: 16,
+  },
   title: {
     fontSize: 28,
     fontWeight: "700",

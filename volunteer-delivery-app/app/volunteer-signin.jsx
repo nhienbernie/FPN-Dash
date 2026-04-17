@@ -1,22 +1,23 @@
-import { useState } from "react";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import AppButton from "../components/AppButton";
-import {
-  buildInitialValues,
-  isValidEmail,
-  validateFieldSet,
-} from "../validators/volunteerValidators";
-import { styles } from "../styles/volunteerSignUpSignIn.styles";
+import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { supabase } from "../services/supabase";
+import { styles } from "../styles/volunteerSignUpSignIn.styles";
+import {
+    buildInitialValues,
+    isValidEmail,
+    validateFieldSet,
+} from "../validators/volunteerValidators";
 
 const FIELDS = [
   {
@@ -75,6 +76,24 @@ export default function SignInScreen() {
 
     if (authError) {
       setErrors({ general: "Invalid credentials. Please try again." });
+      setSubmitState("idle");
+      return;
+    }
+
+    const volunteerProfileResult = await ensureVolunteerProfile({
+      supabase,
+      user: authData.user,
+    });
+
+    if (
+      volunteerProfileResult.status === "error" ||
+      volunteerProfileResult.status === "incomplete"
+    ) {
+      setErrors({
+        general:
+          volunteerProfileResult.message ||
+          "Unable to restore your volunteer profile.",
+      });
       setSubmitState("idle");
       return;
     }

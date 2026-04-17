@@ -276,20 +276,9 @@ const syncCustomerProfile = async ({
     IsVolunteer: false,
   };
 
-  if (existingCustomer) {
-    const { error } = await adminSupabase
-      .from("customers")
-      .update(customerPayload)
-      .eq("phone_number", phone);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return;
-  }
-
-  const { error } = await adminSupabase.from("customers").insert(customerPayload);
+  const { error } = await adminSupabase
+    .from("customers")
+    .upsert(customerPayload, { onConflict: "uid" });
 
   if (error) {
     throw new Error(error.message);

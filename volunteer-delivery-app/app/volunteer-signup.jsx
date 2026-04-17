@@ -1,22 +1,22 @@
-import { useState } from "react";
 import { useRouter } from "expo-router";
-import { supabase } from "../services/supabase";
+import { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
 import AppButton from "../components/AppButton";
+import { supabase } from "../services/supabase";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import {
-  buildInitialValues,
-  digitsOnly,
-  isValidEmail,
-  isValidZip,
-  validateFieldSet,
+    buildInitialValues,
+    digitsOnly,
+    isValidEmail,
+    isValidZip,
+    validateFieldSet,
 } from "../validators/volunteerValidators";
 
 const FIELDS = [
@@ -162,10 +162,22 @@ export default function VolunteerSignupScreen() {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formValues.email,
         password: formValues.password,
+        options: {
+          data: {
+            role: "volunteer",
+            first_name: formValues.firstName,
+            last_name: formValues.lastName,
+            phone_number: formValues.phone,
+            zip: formValues.zip,
+          },
+        },
       });
 
       if (authError) {
-        setErrors({ email: authError.message });
+        setErrors({
+          general:
+            authError.message || "Unable to create your volunteer account.",
+        });
         setSubmitState("idle");
         return;
       }
