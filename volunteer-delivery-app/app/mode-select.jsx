@@ -6,20 +6,36 @@ import { theme } from "../theme";
 export default function ModeSelectScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome to the FPN Delivery App Serving Licking County!</Text>
-      <Text style={styles.subtitle}>Please select your mode to get started:</Text>
+      <View style={[styles.glow, styles.glowTop]} />
+      <View style={[styles.glow, styles.glowBottom]} />
 
-      <AppButton
-        title="I'm a Volunteer"
-        onPress={() => router.push("/volunteer-options")}
-        style={styles.button}
-      />
-      <AppButton
-        title="I Need Food"
-        variant="secondary"
-        onPress={() => router.push("/requester")}
-        style={styles.button}
-      />
+      <View style={styles.heroCard}>
+        <Text style={styles.eyebrow}>Food Pantry Network</Text>
+        <Text style={styles.title}>
+          Delivery support for requesters, volunteers, and live admin demos.
+        </Text>
+        <Text style={styles.subtitle}>
+          Pick the path you want to preview and jump straight into the workflow.
+        </Text>
+
+        <AppButton
+          title="Volunteer Portal"
+          onPress={() => router.push("/volunteer-options")}
+          style={styles.button}
+        />
+        <AppButton
+          title="Request Food"
+          variant="secondary"
+          onPress={() => router.push("/requester")}
+          style={styles.button}
+        />
+        <AppButton
+          title="Admin Demo"
+          variant="ghost"
+          onPress={() => router.push("/admin-dashboard")}
+          style={styles.button}
+        />
+      </View>
     </View>
   );
 }
@@ -28,26 +44,62 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center",
     paddingHorizontal: 24,
     backgroundColor: theme.colors.background,
-    borderWidth: 12,
-    borderColor: "#398288",
-    borderRadius: 55
+    overflow: "hidden",
+  },
+  glow: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    opacity: 0.18,
+  },
+  glowTop: {
+    top: -40,
+    right: -30,
+    backgroundColor: theme.colors.secondary,
+  },
+  glowBottom: {
+    bottom: -80,
+    left: -20,
+    backgroundColor: theme.colors.primary,
+  },
+  heroCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    elevation: 4,
+  },
+  eyebrow: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.primary,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: theme.spacing.md,
   },
   title: {
-    fontSize: 28,
+    fontSize: 33,
     fontWeight: "700",
     color: theme.colors.text,
-    marginBottom: 20,
-    textAlign: "center",
-    marginTop: 50
+    marginBottom: 14,
+    lineHeight: 40,
   },
   subtitle: {
     fontSize: 16,
     color: theme.colors.mutedText,
-    marginBottom: 20,
-    textAlign: "center",
+    marginBottom: theme.spacing.xl,
+    lineHeight: 24,
   },
   button: {
     width: "100%",

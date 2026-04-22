@@ -527,10 +527,30 @@ export default function VolunteerDashboard() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Volunteer Dashboard</Text>
-        {hasVolunteerProfile && profileMessage ? (
-          <Text style={styles.emptyText}>{profileMessage}</Text>
-        ) : null}
+        <View style={styles.heroCard}>
+          <Text style={styles.eyebrow}>Volunteer Operations</Text>
+          <Text style={styles.title}>Volunteer dashboard</Text>
+          <Text style={styles.heroSubtitle}>
+            Track your active delivery, browse open requests, and keep ETA
+            updates flowing back to requesters.
+          </Text>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryPill}>
+              <Text style={styles.summaryLabel}>
+                {activeOrder ? "1 active delivery" : "No active delivery"}
+              </Text>
+            </View>
+            <View style={styles.summaryPill}>
+              <Text style={styles.summaryLabel}>
+                {availableOrders.length} open request
+                {availableOrders.length === 1 ? "" : "s"}
+              </Text>
+            </View>
+          </View>
+          {hasVolunteerProfile && profileMessage ? (
+            <Text style={styles.heroNote}>{profileMessage}</Text>
+          ) : null}
+        </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>My Active Delivery</Text>
@@ -712,16 +732,75 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+  },
+  heroCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    elevation: 3,
+  },
+  eyebrow: {
+    color: theme.colors.primary,
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: theme.spacing.sm,
   },
   title: {
-    fontSize: 24,
+    fontSize: 29,
     fontWeight: "700",
     color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  heroSubtitle: {
+    fontSize: 15,
+    color: theme.colors.mutedText,
+    lineHeight: 22,
     marginBottom: theme.spacing.lg,
-    textAlign: "center",
+  },
+  summaryRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm,
+  },
+  summaryPill: {
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  heroNote: {
+    marginTop: theme.spacing.md,
+    fontSize: 14,
+    color: theme.colors.infoText,
+    lineHeight: 21,
   },
   section: {
     marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
   },
   sectionTitle: {
     fontSize: 20,

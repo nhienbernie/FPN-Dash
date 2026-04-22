@@ -10,6 +10,11 @@ const PORT = process.env.PORT || 4000;
 const OTP_EXPIRY_MS = 10 * 60 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 const OTP_CODE_LENGTH = 6;
+const DEMO_REQUESTER = {
+  phone: "1234567890",
+  dob: "01/01/2001",
+  code: "123456",
+};
 
 const DATA_PATH = path.join(__dirname, "data", "pantry-users.json");
 const ENV_PATH = path.join(__dirname, "..", ".env");
@@ -88,6 +93,8 @@ const buildVerificationCode = () =>
   crypto.randomInt(0, 10 ** OTP_CODE_LENGTH).toString().padStart(OTP_CODE_LENGTH, "0");
 const maskPhone = (phone = "") =>
   phone.length >= 4 ? `***-***-${phone.slice(-4)}` : phone;
+const isDemoRequester = (phone, dob) =>
+  phone === DEMO_REQUESTER.phone && dob === DEMO_REQUESTER.dob;
 
 const loadPantryUsers = () => {
   const raw = fs.readFileSync(DATA_PATH, "utf8");
@@ -298,13 +305,24 @@ app.post("/api/food-signup/start", async (req, res) => {
       message: "We could not match that phone number and date of birth to a pantry record.",
     });
 
-  const code = buildVerificationCode();
+  const demoRequester = isDemoRequester(normalizedPhone, normalizedDob);
+  const code = demoRequester ? DEMO_REQUESTER.code : buildVerificationCode();
   const key = buildVerificationKey(normalizedPhone, normalizedDob);
   pendingVerifications.set(key, {
     code,
     expiresAt: Date.now() + OTP_EXPIRY_MS,
     attemptsRemaining: MAX_VERIFY_ATTEMPTS,
   });
+
+  if (demoRequester) {
+    return res.json({
+      status: "demo_verification_ready",
+      message:
+        "Demo sign-in is ready. SMS was skipped and the default code 123456 will be used automatically.",
+      normalizedPhone,
+      demoCode: DEMO_REQUESTER.code,
+    });
+  }
 
   try {
     await sendSms({
@@ -358,14 +376,15 @@ app.post("/api/food-signup/verify", async (req, res) => {
 
   const key = buildVerificationKey(normalizedPhone, normalizedDob);
   const verification = pendingVerifications.get(key);
+  const demoRequester = isDemoRequester(normalizedPhone, normalizedDob);
 
-  if (!verification)
+  if (!verification && !(demoRequester && trimmedCode === DEMO_REQUESTER.code))
     return res.status(400).json({ status: "start_required", message: "Call /api/food-signup/start first." });
-  if (verification.expiresAt < Date.now()) {
+  if (verification && verification.expiresAt < Date.now()) {
     pendingVerifications.delete(key);
     return res.status(401).json({ status: "expired_code", message: "Code expired. Request a new one." });
   }
-  if (trimmedCode !== verification.code) {
+  if (verification && trimmedCode !== verification.code) {
     verification.attemptsRemaining -= 1;
     if (verification.attemptsRemaining <= 0) {
       pendingVerifications.delete(key);
@@ -375,7 +394,9 @@ app.post("/api/food-signup/verify", async (req, res) => {
     return res.status(401).json({ status: "invalid_code", message: "Invalid code." });
   }
 
-  pendingVerifications.delete(key);
+  if (verification) {
+    pendingVerifications.delete(key);
+  }
 
   if (!hasSupabaseServerConfig)
     return res.status(500).json({

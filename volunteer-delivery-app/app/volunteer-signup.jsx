@@ -230,76 +230,78 @@ export default function VolunteerSignupScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {errors.general ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{errors.general}</Text>
-          </View>
-        ) : null}
+        <View style={styles.formCard}>
+          {errors.general ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{errors.general}</Text>
+            </View>
+          ) : null}
 
-        {submitState === "success" ? (
-          <View style={styles.successBanner}>
-            <Text style={styles.successText}>
-              Volunteer sign-up details look good. You can continue to next
-              onboarding steps.
-            </Text>
-          </View>
-        ) : null}
+          {submitState === "success" ? (
+            <View style={styles.successBanner}>
+              <Text style={styles.successText}>
+                Volunteer sign-up details look good. You can continue to next
+                onboarding steps.
+              </Text>
+            </View>
+          ) : null}
 
-        <Text style={styles.title}>Volunteer Sign Up</Text>
-        <Text style={styles.subtitle}>Step {step} of 2</Text>
-        <Text style={styles.stepHint}>
-          {step === 1
-            ? "Enter your details to continue."
-            : "Create your password to finish setting up your volunteer account."}
-        </Text>
+          <Text style={styles.title}>Volunteer Sign Up</Text>
+          <Text style={styles.subtitle}>Step {step} of 2</Text>
+          <Text style={styles.stepHint}>
+            {step === 1
+              ? "Enter your details to continue."
+              : "Create your password to finish setting up your volunteer account."}
+          </Text>
 
-        {visibleFields.map((field) => (
-          <View key={field.key} style={styles.fieldWrapper}>
-            <Text style={styles.label}>{field.label}</Text>
-            <TextInput
-              value={formValues[field.key]}
-              onChangeText={(text) => handleChange(field.key, text)}
-              placeholder={field.placeholder}
-              keyboardType={field.keyboardType}
-              autoCapitalize={field.autoCapitalize || "sentences"}
-              secureTextEntry={field.secureTextEntry}
-              style={[
-                styles.input,
-                errors[field.key] ? styles.inputError : null,
-              ]}
-            />
-            {errors[field.key] ? (
-              <Text style={styles.errorText}>{errors[field.key]}</Text>
-            ) : null}
-          </View>
-        ))}
+          {visibleFields.map((field) => (
+            <View key={field.key} style={styles.fieldWrapper}>
+              <Text style={styles.label}>{field.label}</Text>
+              <TextInput
+                value={formValues[field.key]}
+                onChangeText={(text) => handleChange(field.key, text)}
+                placeholder={field.placeholder}
+                keyboardType={field.keyboardType}
+                autoCapitalize={field.autoCapitalize || "sentences"}
+                secureTextEntry={field.secureTextEntry}
+                style={[
+                  styles.input,
+                  errors[field.key] ? styles.inputError : null,
+                ]}
+              />
+              {errors[field.key] ? (
+                <Text style={styles.errorText}>{errors[field.key]}</Text>
+              ) : null}
+            </View>
+          ))}
 
-        {step === 1 ? (
-          <AppButton
-            title="Next"
-            onPress={handleNext}
-            style={styles.submitButton}
-          />
-        ) : (
-          <View style={styles.stepTwoActions}>
+          {step === 1 ? (
             <AppButton
-              title="Back"
-              variant="secondary"
-              onPress={handleBack}
-              style={[styles.actionButton, styles.backButton]}
+              title="Next"
+              onPress={handleNext}
+              style={styles.submitButton}
             />
-            <AppButton
-              title={
-                submitState === "loading"
-                  ? "Creating Account..."
-                  : "Create Volunteer Account"
-              }
-              onPress={handleSubmit}
-              disabled={submitState === "loading"}
-              style={styles.actionButton}
-            />
-          </View>
-        )}
+          ) : (
+            <View style={styles.stepTwoActions}>
+              <AppButton
+                title="Back"
+                variant="secondary"
+                onPress={handleBack}
+                style={[styles.actionButton, styles.backButton]}
+              />
+              <AppButton
+                title={
+                  submitState === "loading"
+                    ? "Creating Account..."
+                    : "Create Volunteer Account"
+                }
+                onPress={handleSubmit}
+                disabled={submitState === "loading"}
+                style={styles.actionButton}
+              />
+            </View>
+          )}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

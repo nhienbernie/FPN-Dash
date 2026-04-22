@@ -29,7 +29,8 @@ Server runs on `http://localhost:4000` by default.
 
 ## Demo Notes
 
-- Verification code is fixed to `123456`.
+- The special demo requester `1234567890` + `01/01/2001` skips SMS and uses the default code `123456`.
+- All other matched requester records still receive a generated 6-digit SMS code.
 - Pantry database is local JSON at `server/data/pantry-users.json`.
 - Verification state is in-memory and resets when the server restarts.
 - Requesters must match both phone number and DOB before verification starts.

@@ -5,29 +5,41 @@ export const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.colors.background,
-    borderWidth: 12,
-    borderColor: "#398288",
-    borderRadius: 55
   },
   content: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingTop: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxl,
+  },
+  formCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    elevation: 3,
   },
   successBanner: {
     backgroundColor: theme.colors.successBg,
     borderWidth: 1,
     borderColor: theme.colors.successBorder,
-    borderRadius: theme.radius.md,
-    padding: 12,
+    borderRadius: theme.radius.lg,
+    padding: 14,
     marginBottom: 16,
   },
   errorBanner: {
-    backgroundColor: "#FEF3F2",
+    backgroundColor: theme.colors.errorBg,
     borderWidth: 1,
-    borderColor: theme.colors.danger,
-    borderRadius: theme.radius.md,
-    padding: 12,
+    borderColor: theme.colors.errorBorder,
+    borderRadius: theme.radius.lg,
+    padding: 14,
     marginBottom: 16,
   },
   successText: {
@@ -35,33 +47,27 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  errorBanner: {
-    backgroundColor: "#FEF3F2",
-    borderWidth: 1,
-    borderColor: theme.colors.danger,
-    borderRadius: theme.radius.md,
-    padding: 12,
-    marginBottom: 16,
-  },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: "700",
     color: theme.colors.text,
     marginBottom: 6,
-    marginTop: 50
+    marginTop: theme.spacing.xl,
+    letterSpacing: -0.4,
   },
   subtitle: {
     fontSize: 15,
     color: theme.colors.mutedText,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   stepHint: {
     fontSize: 15,
     color: theme.colors.mutedText,
     marginBottom: 22,
+    lineHeight: 22,
   },
   fieldWrapper: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   label: {
     color: theme.colors.labelText,
@@ -72,15 +78,15 @@ export const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 15,
     color: theme.colors.text,
   },
   inputError: {
-    borderColor: theme.colors.danger,
+    borderColor: theme.colors.errorBorder,
   },
   errorText: {
     marginTop: 6,
@@ -93,11 +99,12 @@ export const styles = StyleSheet.create({
   stepTwoActions: {
     marginTop: 12,
     flexDirection: "row",
+    gap: theme.spacing.md,
   },
   actionButton: {
     flex: 1,
   },
   backButton: {
-    marginRight: 10,
+    marginRight: 0,
   },
 });

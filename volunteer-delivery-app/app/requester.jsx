@@ -20,6 +20,7 @@ import { digitsOnly } from "../validators/volunteerValidators";
 const AUTH_API_BASE_URL =
   process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
 const VERIFICATION_CODE_LENGTH = 6;
+const DEMO_VERIFICATION_DEFAULT_CODE = "123456";
 
 // To automatically format input as the user types their DOB
 const DOB_DIGIT_LENGTH = 8;
@@ -157,6 +158,43 @@ export default function RequesterScreen() {
     return body;
   };
 
+  const installVerifiedSession = async (session) => {
+    if (!session?.access_token || !session?.refresh_token) {
+      throw new Error("Verified session was not returned by the server.");
+    }
+
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: session.access_token,
+      refresh_token: session.refresh_token,
+    });
+
+    if (sessionError) {
+      throw new Error(sessionError.message);
+    }
+  };
+
+  const finishVerifiedSignIn = async ({
+    phone,
+    dob,
+    code,
+    successMessage,
+  }) => {
+    const response = await sendAuthRequest("/api/food-signup/verify", {
+      phone,
+      dob,
+      code,
+    });
+
+    await installVerifiedSession(response.session);
+
+    setErrors({});
+    setVerificationRequested(false);
+    setVerificationCode("");
+    setServerMessage(successMessage || response.message || "");
+    setSubmitState("idle");
+    router.replace("/order-food");
+  };
+
   const handleSendCode = async () => {
     const validatedValues = validateBaseFields();
 
@@ -171,6 +209,17 @@ export default function RequesterScreen() {
         phone: validatedValues.phone,
         dob: validatedValues.dob,
       });
+
+      if (response.status === "demo_verification_ready") {
+        setSubmitState("verifying");
+        await finishVerifiedSignIn({
+          phone: response.normalizedPhone || validatedValues.phone,
+          dob: validatedValues.dob,
+          code: response.demoCode || DEMO_VERIFICATION_DEFAULT_CODE,
+          successMessage: response.message,
+        });
+        return;
+      }
 
       setNormalizedPhone(response.normalizedPhone || validatedValues.phone);
       setVerificationRequested(true);
@@ -201,28 +250,11 @@ export default function RequesterScreen() {
     setErrors({});
 
     try {
-      const response = await sendAuthRequest("/api/food-signup/verify", {
+      await finishVerifiedSignIn({
         phone: normalizedPhone || validatedValues.phone,
         dob: validatedValues.dob,
         code: trimmedCode,
       });
-
-      if (!response.session?.access_token || !response.session?.refresh_token) {
-        throw new Error("Verified session was not returned by the server.");
-      }
-
-      // Install the verified Supabase session returned by the demo server.
-      const { error: sessionError } = await supabase.auth.setSession({
-        access_token: response.session.access_token,
-        refresh_token: response.session.refresh_token,
-      });
-
-      if (sessionError) {
-        throw new Error(sessionError.message);
-      }
-
-      setErrors({});
-      router.replace("/order-food");
     } catch (error) {
       setErrors({ general: error.message || "Unable to verify your account." });
       setSubmitState("idle");
@@ -266,100 +298,105 @@ export default function RequesterScreen() {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
-          {serverMessage ? (
-            <View style={styles.successBanner}>
-              <Text style={styles.successText}>{serverMessage}</Text>
-            </View>
-          ) : null}
+          <View style={styles.formCard}>
+            {serverMessage ? (
+              <View style={styles.successBanner}>
+                <Text style={styles.successText}>{serverMessage}</Text>
+              </View>
+            ) : null}
 
-          {errors.general ? (
-            <View style={modalStyles.errorBanner}>
-              <Text style={styles.errorText}>{errors.general}</Text>
-            </View>
-          ) : null}
+            {errors.general ? (
+              <View style={modalStyles.errorBanner}>
+                <Text style={styles.errorText}>{errors.general}</Text>
+              </View>
+            ) : null}
 
-          <Text style={styles.title}>Request Food Assistance</Text>
-          <Text style={styles.stepHint}>
-            {verificationRequested
-              ? "Enter the 6-digit code to finish signing in."
-              : "Enter your phone number and date of birth to receive a login code by text."}
-          </Text>
+            <Text style={styles.title}>Request Food Assistance</Text>
+            <Text style={styles.stepHint}>
+              {verificationRequested
+                ? "Enter the 6-digit code to finish signing in."
+                : "Enter your phone number and date of birth to receive a login code by text, or use the demo requester for instant access."}
+            </Text>
 
-          {FIELDS.map((field) => (
-            <View key={field.key} style={styles.fieldWrapper}>
-              <Text style={styles.label}>{field.label}</Text>
-              <TextInput
-                value={formValues[field.key]}
-                onChangeText={(text) => handleChange(field.key, text)}
-                placeholder={field.placeholder}
-                placeholderTextColor={theme.colors.mutedText}
-                keyboardType={field.keyboardType}
-                maxLength={field.key === "dob" ? 10 : undefined}
-                autoCapitalize="none"
-                editable={submitState === "idle"}
-                style={[
-                  styles.input,
-                  errors[field.key] ? styles.inputError : null,
-                ]}
-              />
-              {errors[field.key] ? (
-                <Text style={styles.errorText}>{errors[field.key]}</Text>
-              ) : null}
-            </View>
-          ))}
-
-          {verificationRequested ? (
-            <>
-              <View style={styles.fieldWrapper}>
-                <Text style={styles.label}>Verification Code</Text>
+            {FIELDS.map((field) => (
+              <View key={field.key} style={styles.fieldWrapper}>
+                <Text style={styles.label}>{field.label}</Text>
                 <TextInput
-                  value={verificationCode}
-                  onChangeText={(text) => {
-                    setVerificationCode(
-                      digitsOnly(text).slice(0, VERIFICATION_CODE_LENGTH),
-                    );
-                    clearGeneralErrors();
-                  }}
-                  placeholder="Enter 6-digit code"
+                  value={formValues[field.key]}
+                  onChangeText={(text) => handleChange(field.key, text)}
+                  placeholder={field.placeholder}
                   placeholderTextColor={theme.colors.mutedText}
-                  keyboardType="number-pad"
+                  keyboardType={field.keyboardType}
+                  maxLength={field.key === "dob" ? 10 : undefined}
                   autoCapitalize="none"
                   editable={submitState === "idle"}
-                  style={[styles.input, errors.code ? styles.inputError : null]}
+                  style={[
+                    styles.input,
+                    errors[field.key] ? styles.inputError : null,
+                  ]}
                 />
-                {errors.code ? (
-                  <Text style={styles.errorText}>{errors.code}</Text>
+                {errors[field.key] ? (
+                  <Text style={styles.errorText}>{errors[field.key]}</Text>
                 ) : null}
               </View>
+            ))}
 
-              <View style={styles.stepTwoActions}>
-                <AppButton
-                  title={
-                    submitState === "sending" ? "Sending..." : "Send Again"
-                  }
-                  variant="secondary"
-                  onPress={handleSendCode}
-                  disabled={submitState !== "idle"}
-                  style={[styles.actionButton, styles.backButton]}
-                />
-                <AppButton
-                  title={
-                    submitState === "verifying" ? "Verifying..." : "Verify"
-                  }
-                  onPress={handleVerifyAndContinue}
-                  disabled={submitState !== "idle"}
-                  style={styles.actionButton}
-                />
-              </View>
-            </>
-          ) : (
-            <AppButton
-              title={submitState === "sending" ? "Sending..." : "Send Code"}
-              onPress={handleSendCode}
-              disabled={submitState !== "idle"}
-              style={styles.submitButton}
-            />
-          )}
+            {verificationRequested ? (
+              <>
+                <View style={styles.fieldWrapper}>
+                  <Text style={styles.label}>Verification Code</Text>
+                  <TextInput
+                    value={verificationCode}
+                    onChangeText={(text) => {
+                      setVerificationCode(
+                        digitsOnly(text).slice(0, VERIFICATION_CODE_LENGTH),
+                      );
+                      clearGeneralErrors();
+                    }}
+                    placeholder="Enter 6-digit code"
+                    placeholderTextColor={theme.colors.mutedText}
+                    keyboardType="number-pad"
+                    autoCapitalize="none"
+                    editable={submitState === "idle"}
+                    style={[
+                      styles.input,
+                      errors.code ? styles.inputError : null,
+                    ]}
+                  />
+                  {errors.code ? (
+                    <Text style={styles.errorText}>{errors.code}</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.stepTwoActions}>
+                  <AppButton
+                    title={
+                      submitState === "sending" ? "Sending..." : "Send Again"
+                    }
+                    variant="secondary"
+                    onPress={handleSendCode}
+                    disabled={submitState !== "idle"}
+                    style={[styles.actionButton, styles.backButton]}
+                  />
+                  <AppButton
+                    title={
+                      submitState === "verifying" ? "Verifying..." : "Verify"
+                    }
+                    onPress={handleVerifyAndContinue}
+                    disabled={submitState !== "idle"}
+                    style={styles.actionButton}
+                  />
+                </View>
+              </>
+            ) : (
+              <AppButton
+                title={submitState === "sending" ? "Sending..." : "Send Code"}
+                onPress={handleSendCode}
+                disabled={submitState !== "idle"}
+                style={styles.submitButton}
+              />
+            )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </>

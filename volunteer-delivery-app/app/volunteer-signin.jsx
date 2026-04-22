@@ -135,50 +135,52 @@ export default function SignInScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        {submitState === "success" ? (
-          <View style={styles.successBanner}>
-            <Text style={styles.successText}>
-              Signed in successfully! Welcome back.
-            </Text>
-          </View>
-        ) : null}
+        <View style={styles.formCard}>
+          {submitState === "success" ? (
+            <View style={styles.successBanner}>
+              <Text style={styles.successText}>
+                Signed in successfully! Welcome back.
+              </Text>
+            </View>
+          ) : null}
 
-        {errors.general ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{errors.general}</Text>
-          </View>
-        ) : null}
+          {errors.general ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{errors.general}</Text>
+            </View>
+          ) : null}
 
-        <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to your volunteer account.</Text>
+          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Sign in to your volunteer account.</Text>
 
-        {FIELDS.map((field) => (
-          <View key={field.key} style={styles.fieldWrapper}>
-            <Text style={styles.label}>{field.label}</Text>
-            <TextInput
-              value={formValues[field.key]}
-              onChangeText={(text) => handleChange(field.key, text)}
-              placeholder={field.placeholder}
-              keyboardType={field.keyboardType}
-              autoCapitalize={field.autoCapitalize || "sentences"}
-              secureTextEntry={field.secureTextEntry}
-              style={[
-                styles.input,
-                errors[field.key] ? styles.inputError : null,
-              ]}
-            />
-            {errors[field.key] ? (
-              <Text style={styles.errorText}>{errors[field.key]}</Text>
-            ) : null}
-          </View>
-        ))}
+          {FIELDS.map((field) => (
+            <View key={field.key} style={styles.fieldWrapper}>
+              <Text style={styles.label}>{field.label}</Text>
+              <TextInput
+                value={formValues[field.key]}
+                onChangeText={(text) => handleChange(field.key, text)}
+                placeholder={field.placeholder}
+                keyboardType={field.keyboardType}
+                autoCapitalize={field.autoCapitalize || "sentences"}
+                secureTextEntry={field.secureTextEntry}
+                style={[
+                  styles.input,
+                  errors[field.key] ? styles.inputError : null,
+                ]}
+              />
+              {errors[field.key] ? (
+                <Text style={styles.errorText}>{errors[field.key]}</Text>
+              ) : null}
+            </View>
+          ))}
 
-        <AppButton
-          title={submitState === "loading" ? "Signing in..." : "Sign In"}
-          onPress={handleSubmit}
-          disabled={submitState === "loading"}
-          style={styles.submitButton}
-        />
+          <AppButton
+            title={submitState === "loading" ? "Signing in..." : "Sign In"}
+            onPress={handleSubmit}
+            disabled={submitState === "loading"}
+            style={styles.submitButton}
+          />
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );

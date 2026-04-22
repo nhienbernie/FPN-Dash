@@ -6,11 +6,25 @@ const VARIANTS = {
     background: theme.colors.primary,
     pressed: theme.colors.primaryPressed,
     text: theme.colors.primaryText,
+    border: theme.colors.primary,
   },
   secondary: {
-    background: "#CE7E2D",
-    pressed: "#D0D5DD",
+    background: theme.colors.secondary,
+    pressed: theme.colors.secondaryPressed,
+    text: theme.colors.secondaryText,
+    border: theme.colors.secondaryPressed,
+  },
+  ghost: {
+    background: theme.colors.surface,
+    pressed: theme.colors.surfaceMuted,
     text: theme.colors.text,
+    border: theme.colors.border,
+  },
+  danger: {
+    background: theme.colors.danger,
+    pressed: "#B91C1C",
+    text: theme.colors.primaryText,
+    border: theme.colors.danger,
   },
 };
 
@@ -32,6 +46,7 @@ export default function AppButton({
         styles.button,
         {
           backgroundColor: pressed ? colors.pressed : colors.background,
+          borderColor: colors.border,
           opacity: disabled ? 0.6 : 1,
         },
         style,
@@ -44,13 +59,24 @@ export default function AppButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: theme.radius.md,
-    paddingVertical: 14,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingVertical: 15,
     paddingHorizontal: 22,
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: {
+      width: 0,
+      height: 5,
+    },
+    elevation: 2,
   },
   text: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.2,
   },
 });
