@@ -18,11 +18,11 @@
     "firstName": "Testy",
     "lastName": "McTestFace",
     "address": {
-      "line1": "200 Placeholder Ave Apt 1",
+      "line1": "1035 Brice St",
       "line2": "",
-      "city": "Mock City",
+      "city": "Newark",
       "state": "OH",
-      "zip": "43001"
+      "zip": "43055"
     }
   },
   {
