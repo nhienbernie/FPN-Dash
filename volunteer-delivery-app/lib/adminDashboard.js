@@ -3,14 +3,9 @@ import { parseOrderNotes } from "./orderSelectionWorkaround";
 import { theme } from "../theme";
 
 export const ADMIN_TABS = [
-  { key: "changes", label: "Menu Changes" },
+  { key: "menu", label: "Menu Setup" },
   { key: "cancellations", label: "Cancellations" },
   { key: "complaints", label: "Complaints" },
-];
-
-export const MENU_EDITABLE_STATUSES = [
-  ORDER_STATUS.PENDING,
-  ORDER_STATUS.ACCEPTED,
 ];
 
 export const CANCELLABLE_ORDER_STATUSES = [
@@ -86,6 +81,20 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function getMetricValue(metrics, key) {
+  return metrics.find((metric) => metric.key === key)?.value ?? 0;
+}
+
+export function generateMenuItemKey(label) {
+  const base = normalizeText(label)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const suffix = Date.now().toString(36).slice(-4);
+  return `${base || "menu_item"}_${suffix}`;
+}
+
 export function getReportReasonMeta(reason) {
   const normalized = normalizeText(reason).toLowerCase();
   return (
@@ -155,6 +164,57 @@ export function formatQueueAge(value) {
   return `${diffDays}d waiting`;
 }
 
+export function buildMenuSections(items = []) {
+  const grouped = {};
+
+  for (const item of items) {
+    const name = normalizeText(item.category) || "Other";
+    const isActive = item.active !== false;
+
+    if (!grouped[name]) {
+      grouped[name] = {
+        name,
+        items: [],
+        activeItemCount: 0,
+        inactiveItemCount: 0,
+      };
+    }
+
+    grouped[name].items.push({
+      ...item,
+      category: name,
+      active: isActive,
+    });
+
+    if (isActive) {
+      grouped[name].activeItemCount += 1;
+    } else {
+      grouped[name].inactiveItemCount += 1;
+    }
+  }
+
+  return Object.values(grouped)
+    .map((section) => ({
+      ...section,
+      isVisible: section.activeItemCount > 0,
+      itemCount: section.items.length,
+      items: [...section.items].sort((a, b) => {
+        if (a.active !== b.active) {
+          return a.active ? -1 : 1;
+        }
+
+        return normalizeText(a.label).localeCompare(normalizeText(b.label));
+      }),
+    }))
+    .sort((a, b) => {
+      if (a.isVisible !== b.isVisible) {
+        return a.isVisible ? -1 : 1;
+      }
+
+      return a.name.localeCompare(b.name);
+    });
+}
+
 export function getOrderBoxDetails(order) {
   const boxes = [...(order?.boxes ?? [])].sort(
     (a, b) => (a?.box_number ?? 0) - (b?.box_number ?? 0),
@@ -195,10 +255,6 @@ export function getCustomerLabel(order, customerMap = {}) {
   return directName || mappedName || "Customer";
 }
 
-export function isMenuEditable(status) {
-  return MENU_EDITABLE_STATUSES.includes(status);
-}
-
 export function isOrderCancellable(status) {
   return CANCELLABLE_ORDER_STATUSES.includes(status);
 }
@@ -207,9 +263,12 @@ export function isComplaintOpen(status) {
   return OPEN_REPORT_STATUSES.includes(normalizeText(status).toLowerCase());
 }
 
-export function buildAdminMetrics(orders, reports) {
-  const menuChanges = orders.filter((order) => isMenuEditable(order.status)).length;
-  const cancellations = orders.filter((order) => isOrderCancellable(order.status)).length;
+export function buildAdminMetrics(orders, reports, items) {
+  const sections = buildMenuSections(items);
+  const liveSections = sections.filter((section) => section.isVisible).length;
+  const hiddenSections = sections.filter((section) => !section.isVisible).length;
+  const liveItems = items.filter((item) => item.active !== false).length;
+  const cancellableOrders = orders.filter((order) => isOrderCancellable(order.status)).length;
   const openComplaints = reports.filter((report) => isComplaintOpen(report.status)).length;
   const urgentComplaints = reports.filter((report) => {
     if (!isComplaintOpen(report.status)) {
@@ -218,32 +277,40 @@ export function buildAdminMetrics(orders, reports) {
 
     return getReportReasonMeta(report.reason).severity === "High";
   }).length;
-  const activeDeliveries = orders.filter(
-    (order) => order.status === ORDER_STATUS.ACCEPTED || order.status === ORDER_STATUS.IN_TRANSIT,
-  ).length;
 
   return [
     {
-      label: "Menu changes",
-      value: menuChanges,
+      key: "liveSections",
+      label: "Live sections",
+      value: liveSections,
       accent: theme.colors.primary,
     },
     {
+      key: "liveItems",
+      label: "Live items",
+      value: liveItems,
+      accent: theme.colors.infoText,
+    },
+    {
+      key: "cancellations",
       label: "Cancellations",
-      value: cancellations,
+      value: cancellableOrders,
       accent: theme.colors.secondary,
     },
     {
+      key: "openComplaints",
       label: "Open complaints",
       value: openComplaints,
       accent: theme.colors.danger,
     },
     {
-      label: "Active deliveries",
-      value: activeDeliveries,
-      accent: theme.colors.infoText,
+      key: "hiddenSections",
+      label: "Hidden sections",
+      value: hiddenSections,
+      accent: theme.colors.mutedText,
     },
     {
+      key: "urgentComplaints",
       label: "Urgent complaints",
       value: urgentComplaints,
       accent: "#C2410C",
@@ -252,16 +319,25 @@ export function buildAdminMetrics(orders, reports) {
 }
 
 export function buildQueueHeadline(metrics) {
-  if (metrics[4]?.value > 0) {
-    return `${metrics[4].value} urgent complaint${metrics[4].value === 1 ? "" : "s"} need attention.`;
+  const urgentComplaints = getMetricValue(metrics, "urgentComplaints");
+  const hiddenSections = getMetricValue(metrics, "hiddenSections");
+  const cancellations = getMetricValue(metrics, "cancellations");
+  const liveSections = getMetricValue(metrics, "liveSections");
+
+  if (urgentComplaints > 0) {
+    return `${urgentComplaints} urgent complaint${urgentComplaints === 1 ? "" : "s"} need attention.`;
   }
 
-  if (metrics[1]?.value > 0) {
-    return `${metrics[1].value} order cancellation${metrics[1].value === 1 ? "" : "s"} can be cleared next.`;
+  if (hiddenSections > 0) {
+    return `${hiddenSections} menu section${hiddenSections === 1 ? "" : "s"} are hidden from requesters right now.`;
   }
 
-  if (metrics[0]?.value > 0) {
-    return `${metrics[0].value} order menu update${metrics[0].value === 1 ? "" : "s"} are ready to review.`;
+  if (cancellations > 0) {
+    return `${cancellations} order cancellation${cancellations === 1 ? "" : "s"} can be cleared next.`;
+  }
+
+  if (liveSections > 0) {
+    return `${liveSections} menu section${liveSections === 1 ? "" : "s"} are currently available to requesters.`;
   }
 
   return "No urgent admin actions are waiting right now.";

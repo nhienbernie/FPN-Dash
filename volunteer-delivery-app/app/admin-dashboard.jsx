@@ -18,27 +18,27 @@ import AppButton from "../components/AppButton";
 import {
   ADMIN_TABS,
   buildAdminMetrics,
+  buildMenuSections,
   buildQueueHeadline,
   formatElapsedSince,
   formatQueueAge,
+  generateMenuItemKey,
   getCustomerLabel,
   getOrderStatusBadge,
   getOrderSummary,
   getReportReasonMeta,
   getReportStatusMeta,
   isComplaintOpen,
-  isMenuEditable,
   isOrderCancellable,
 } from "../lib/adminDashboard";
-import { buildOrderNotes, parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
 const TAB_COPY = {
-  changes: {
-    title: "Order menu changes",
+  menu: {
+    title: "Menu setup",
     subtitle:
-      "Update box contents or instructions before an order is fully underway.",
+      "Manage the global requester menu by editing sections and the items inside them.",
   },
   cancellations: {
     title: "Order cancellations",
@@ -74,40 +74,15 @@ function buildProfileMap(rows) {
   );
 }
 
-function normalizeDraftItemId(value) {
-  return String(value);
-}
-
-function createEditDraft(order) {
-  const summary = getOrderSummary(order);
-  const existingBoxes =
-    summary.boxDetails.length > 0
-      ? summary.boxDetails.map((box) => ({
-          boxNumber: box.boxNumber,
-          selectedItemIds: box.itemIds.map(normalizeDraftItemId),
-        }))
-      : Array.from({ length: summary.boxCount }, (_, index) => ({
-          boxNumber: index + 1,
-          selectedItemIds: [],
-        }));
-
-  return {
-    boxCount: existingBoxes.length,
-    boxes: existingBoxes,
-    userNotes: summary.specialInstructions,
-  };
-}
-
 export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyKey, setBusyKey] = useState("");
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
-  const [activeTab, setActiveTab] = useState("changes");
-  const [editingOrder, setEditingOrder] = useState(null);
-  const [editDraft, setEditDraft] = useState(null);
-  const [activeEditBoxIndex, setActiveEditBoxIndex] = useState(0);
+  const [activeTab, setActiveTab] = useState("menu");
   const [focusedComplaint, setFocusedComplaint] = useState(null);
+  const [sectionEditor, setSectionEditor] = useState(null);
+  const [itemEditor, setItemEditor] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     orders: [],
     reports: [],
@@ -174,8 +149,7 @@ export default function AdminDashboard() {
           .order("created_at", { ascending: false }),
         supabase
           .from("items")
-          .select("id, label, category")
-          .eq("active", true)
+          .select("id, key, label, category, active")
           .order("category", { ascending: true })
           .order("label", { ascending: true }),
         supabase.from("customers").select("uid, first_name, last_name"),
@@ -224,46 +198,34 @@ export default function AdminDashboard() {
   };
 
   const metrics = useMemo(
-    () => buildAdminMetrics(dashboardData.orders, dashboardData.reports),
-    [dashboardData.orders, dashboardData.reports],
+    () =>
+      buildAdminMetrics(
+        dashboardData.orders,
+        dashboardData.reports,
+        dashboardData.itemCatalog,
+      ),
+    [dashboardData.orders, dashboardData.reports, dashboardData.itemCatalog],
   );
 
-  const metricCards = useMemo(() => metrics.slice(0, 4), [metrics]);
+  const metricCards = useMemo(
+    () =>
+      metrics.filter((metric) =>
+        ["liveSections", "liveItems", "cancellations", "openComplaints"].includes(
+          metric.key,
+        ),
+      ),
+    [metrics],
+  );
+
   const queueHeadline = useMemo(() => buildQueueHeadline(metrics), [metrics]);
 
-  const itemCatalogById = useMemo(
-    () =>
-      Object.fromEntries(
-        dashboardData.itemCatalog.map((item) => [normalizeDraftItemId(item.id), item]),
-      ),
+  const menuSections = useMemo(
+    () => buildMenuSections(dashboardData.itemCatalog),
     [dashboardData.itemCatalog],
   );
 
-  const itemsByCategory = useMemo(() => {
-    const grouped = {};
-
-    for (const item of dashboardData.itemCatalog) {
-      const category = item.category || "Other";
-
-      if (!grouped[category]) {
-        grouped[category] = [];
-      }
-      grouped[category].push(item);
-    }
-
-    return Object.entries(grouped);
-  }, [dashboardData.itemCatalog]);
-
   const ordersById = useMemo(
     () => Object.fromEntries(dashboardData.orders.map((order) => [order.order_id, order])),
-    [dashboardData.orders],
-  );
-
-  const menuQueue = useMemo(
-    () =>
-      dashboardData.orders
-        .filter((order) => isMenuEditable(order.status))
-        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     [dashboardData.orders],
   );
 
@@ -298,228 +260,231 @@ export default function AdminDashboard() {
       });
   }, [dashboardData.reports]);
 
-  const openMenuEditor = (order) => {
-    setEditingOrder(order);
-    setEditDraft(createEditDraft(order));
-    setActiveEditBoxIndex(0);
-  };
-
-  const closeMenuEditor = (force = false) => {
-    if (!force && busyKey === `save-menu-${editingOrder?.order_id}`) {
-      return;
+  const currentTabCopy = TAB_COPY[activeTab];
+  const currentSection = useMemo(() => {
+    if (sectionEditor?.mode !== "manage") {
+      return null;
     }
 
-    setEditingOrder(null);
-    setEditDraft(null);
-    setActiveEditBoxIndex(0);
-  };
+    return (
+      menuSections.find((section) => section.name === sectionEditor.originalName) || null
+    );
+  }, [menuSections, sectionEditor]);
 
-  const updateDraftBoxCount = (nextBoxCount) => {
-    setEditDraft((current) => {
-      if (!current) {
-        return current;
-      }
-
-      const safeCount = Math.max(1, nextBoxCount);
-      const nextBoxes = [...current.boxes];
-
-      if (safeCount > nextBoxes.length) {
-        for (let index = nextBoxes.length; index < safeCount; index += 1) {
-          nextBoxes.push({
-            boxNumber: index + 1,
-            selectedItemIds: [],
-          });
-        }
-      } else {
-        nextBoxes.length = safeCount;
-      }
-
-      const reNumbered = nextBoxes.map((box, index) => ({
-        ...box,
-        boxNumber: index + 1,
-      }));
-
-      setActiveEditBoxIndex((currentIndex) =>
-        Math.min(currentIndex, reNumbered.length - 1),
-      );
-
-      return {
-        ...current,
-        boxCount: safeCount,
-        boxes: reNumbered,
-      };
+  const openCreateSection = () => {
+    setSectionEditor({
+      mode: "create",
+      originalName: "",
+      name: "",
+      firstItemLabel: "",
     });
   };
 
-  const toggleDraftItem = (itemId) => {
-    const normalizedItemId = normalizeDraftItemId(itemId);
-
-    setEditDraft((current) => {
-      if (!current) {
-        return current;
-      }
-
-      const nextBoxes = current.boxes.map((box, index) => {
-        if (index !== activeEditBoxIndex) {
-          return box;
-        }
-
-        const exists = box.selectedItemIds.includes(normalizedItemId);
-        return {
-          ...box,
-          selectedItemIds: exists
-            ? box.selectedItemIds.filter((selectedId) => selectedId !== normalizedItemId)
-            : [...box.selectedItemIds, normalizedItemId],
-        };
-      });
-
-      return {
-        ...current,
-        boxes: nextBoxes,
-      };
+  const openManageSection = (section) => {
+    setSectionEditor({
+      mode: "manage",
+      originalName: section.name,
+      name: section.name,
+      firstItemLabel: "",
     });
   };
 
-  const handleSaveMenuChanges = async () => {
-    if (!editingOrder || !editDraft) {
+  const closeSectionEditor = () => {
+    if (busyKey === "section-save") {
       return;
     }
 
-    const orderId = editingOrder.order_id;
-    setBusyKey(`save-menu-${orderId}`);
+    setSectionEditor(null);
+  };
+
+  const openCreateItem = (sectionName) => {
+    setItemEditor({
+      mode: "create",
+      sectionName,
+      itemId: null,
+      label: "",
+      active: true,
+    });
+  };
+
+  const openEditItem = (item) => {
+    setItemEditor({
+      mode: "edit",
+      sectionName: item.category || "Other",
+      itemId: item.id,
+      label: item.label || "",
+      active: item.active !== false,
+    });
+  };
+
+  const closeItemEditor = () => {
+    if (busyKey === "item-save") {
+      return;
+    }
+
+    setItemEditor(null);
+  };
+
+  const performSectionVisibilityUpdate = async (section, nextActive) => {
+    setBusyKey(`section-toggle-${section.name}`);
 
     try {
-      const nextBoxes = editDraft.boxes.map((box, index) => ({
-        ...box,
-        boxNumber: index + 1,
-      }));
-      const existingBoxes = [...(editingOrder.boxes ?? [])].sort(
-        (a, b) => (a?.box_number ?? 0) - (b?.box_number ?? 0),
-      );
-      const keptBoxes = existingBoxes.slice(0, nextBoxes.length);
-      const removedBoxes = existingBoxes.slice(nextBoxes.length);
-      const removedBoxIds = removedBoxes
-        .map((box) => box.box_id)
-        .filter(Boolean);
+      const { error } = await supabase
+        .from("items")
+        .update({ active: nextActive })
+        .eq("category", section.name);
 
-      if (removedBoxIds.length > 0) {
-        const { error: removeOrderItemsError } = await supabase
-          .from("order_items")
-          .delete()
-          .in("box_id", removedBoxIds);
-
-        if (removeOrderItemsError) {
-          throw removeOrderItemsError;
-        }
-
-        const { error: removeBoxesError } = await supabase
-          .from("boxes")
-          .delete()
-          .in("box_id", removedBoxIds);
-
-        if (removeBoxesError) {
-          throw removeBoxesError;
-        }
+      if (error) {
+        throw error;
       }
 
-      for (let index = 0; index < keptBoxes.length; index += 1) {
-        const box = keptBoxes[index];
-        const nextBoxNumber = index + 1;
-
-        if (box.box_number !== nextBoxNumber) {
-          const { error: updateBoxError } = await supabase
-            .from("boxes")
-            .update({ box_number: nextBoxNumber })
-            .eq("box_id", box.box_id);
-
-          if (updateBoxError) {
-            throw updateBoxError;
-          }
-        }
-      }
-
-      let createdBoxes = [];
-      if (nextBoxes.length > keptBoxes.length) {
-        const rows = nextBoxes.slice(keptBoxes.length).map((box) => ({
-          order_id: orderId,
-          box_number: box.boxNumber,
-        }));
-
-        const { data, error: createBoxesError } = await supabase
-          .from("boxes")
-          .insert(rows)
-          .select("box_id, box_number");
-
-        if (createBoxesError) {
-          throw createBoxesError;
-        }
-
-        createdBoxes = data ?? [];
-      }
-
-      const finalBoxes = [...keptBoxes, ...createdBoxes].sort(
-        (a, b) => (a?.box_number ?? 0) - (b?.box_number ?? 0),
-      );
-      const finalBoxIds = finalBoxes.map((box) => box.box_id).filter(Boolean);
-
-      if (finalBoxIds.length > 0) {
-        const { error: clearItemsError } = await supabase
-          .from("order_items")
-          .delete()
-          .in("box_id", finalBoxIds);
-
-        if (clearItemsError) {
-          throw clearItemsError;
-        }
-      }
-
-      const orderItemRows = finalBoxes.flatMap((box, index) =>
-        (nextBoxes[index]?.selectedItemIds ?? []).map((itemId) => ({
-          box_id: box.box_id,
-          item_id: Number.isFinite(Number(itemId)) ? Number(itemId) : itemId,
-        })),
-      );
-
-      if (orderItemRows.length > 0) {
-        const { error: insertItemsError } = await supabase
-          .from("order_items")
-          .insert(orderItemRows);
-
-        if (insertItemsError) {
-          throw insertItemsError;
-        }
-      }
-
-      const existingTracking = parseOrderNotes(editingOrder.notes).tracking;
-      const selectedLabels = nextBoxes.flatMap((box) =>
-        box.selectedItemIds.map(
-          (itemId) => itemCatalogById[itemId]?.label ?? String(itemId),
-        ),
-      );
-      const nextNotes = buildOrderNotes({
-        selectedItems: selectedLabels,
-        userNotes: editDraft.userNotes,
-        tracking: existingTracking,
-      });
-
-      const { error: updateOrderError } = await supabase
-        .from("orders")
-        .update({
-          box_count: nextBoxes.length,
-          notes: nextNotes,
-        })
-        .eq("order_id", orderId);
-
-      if (updateOrderError) {
-        throw updateOrderError;
-      }
-
-      closeMenuEditor(true);
       await loadDashboard({ silent: true });
     } catch (error) {
-      console.error("Error saving menu changes:", error);
+      console.error("Error updating section visibility:", error);
       Alert.alert(
-        "Unable to Save Menu Changes",
+        nextActive ? "Unable to Restore Section" : "Unable to Hide Section",
+        error.message || "Please try again.",
+      );
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const handleSaveSection = async () => {
+    if (!sectionEditor) {
+      return;
+    }
+
+    const trimmedName = sectionEditor.name.trim();
+    if (!trimmedName) {
+      Alert.alert("Missing Section Name", "Please enter a section name.");
+      return;
+    }
+
+    const isDuplicate = menuSections.some((section) => {
+      if (sectionEditor.mode === "manage" && section.name === sectionEditor.originalName) {
+        return false;
+      }
+
+      return section.name.toLowerCase() === trimmedName.toLowerCase();
+    });
+
+    if (isDuplicate) {
+      Alert.alert(
+        "Section Already Exists",
+        "Choose a different section name to avoid merging menu groups by accident.",
+      );
+      return;
+    }
+
+    setBusyKey("section-save");
+
+    try {
+      if (sectionEditor.mode === "create") {
+        const firstItemLabel = sectionEditor.firstItemLabel.trim();
+
+        if (!firstItemLabel) {
+          throw new Error("A new section needs its first item label.");
+        }
+
+        const { error } = await supabase.from("items").insert({
+          key: generateMenuItemKey(firstItemLabel),
+          label: firstItemLabel,
+          category: trimmedName,
+          active: true,
+        });
+
+        if (error) {
+          throw error;
+        }
+      } else if (trimmedName !== sectionEditor.originalName) {
+        const { error } = await supabase
+          .from("items")
+          .update({ category: trimmedName })
+          .eq("category", sectionEditor.originalName);
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      setSectionEditor(null);
+      await loadDashboard({ silent: true });
+    } catch (error) {
+      console.error("Error saving section:", error);
+      Alert.alert(
+        "Unable to Save Section",
+        error.message || "Please try again.",
+      );
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const handleSaveItem = async () => {
+    if (!itemEditor) {
+      return;
+    }
+
+    const trimmedLabel = itemEditor.label.trim();
+    if (!trimmedLabel) {
+      Alert.alert("Missing Item Label", "Please enter an item label.");
+      return;
+    }
+
+    setBusyKey("item-save");
+
+    try {
+      if (itemEditor.mode === "create") {
+        const { error } = await supabase.from("items").insert({
+          key: generateMenuItemKey(trimmedLabel),
+          label: trimmedLabel,
+          category: itemEditor.sectionName,
+          active: true,
+        });
+
+        if (error) {
+          throw error;
+        }
+      } else {
+        const { error } = await supabase
+          .from("items")
+          .update({ label: trimmedLabel })
+          .eq("id", itemEditor.itemId);
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      setItemEditor(null);
+      await loadDashboard({ silent: true });
+    } catch (error) {
+      console.error("Error saving item:", error);
+      Alert.alert("Unable to Save Item", error.message || "Please try again.");
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const handleToggleItemVisibility = async (item, nextActive) => {
+    setBusyKey(`item-toggle-${item.id}`);
+
+    try {
+      const { error } = await supabase
+        .from("items")
+        .update({ active: nextActive })
+        .eq("id", item.id);
+
+      if (error) {
+        throw error;
+      }
+
+      await loadDashboard({ silent: true });
+    } catch (error) {
+      console.error("Error updating item visibility:", error);
+      Alert.alert(
+        nextActive ? "Unable to Restore Item" : "Unable to Hide Item",
         error.message || "Please try again.",
       );
     } finally {
@@ -612,23 +577,79 @@ export default function AdminDashboard() {
     }
   };
 
-  const currentTabCopy = TAB_COPY[activeTab];
-  const currentEditBox = editDraft?.boxes?.[activeEditBoxIndex] ?? null;
+  const renderMenuSectionCard = (section) => {
+    const previewItems = section.items
+      .filter((item) => item.active)
+      .slice(0, 4)
+      .map((item) => item.label);
+    const previewText =
+      previewItems.length > 0
+        ? previewItems.join(", ")
+        : "No live items are currently visible to requesters.";
 
-  const renderQueueCard = (order, mode) => {
+    return (
+      <View key={section.name} style={styles.queueCard}>
+        <View style={styles.queueCardHeader}>
+          <View style={styles.queueCardTitleBlock}>
+            <Text style={styles.queueCardTitle}>{section.name}</Text>
+            <Text style={styles.queueCardMeta}>
+              {section.activeItemCount} live item
+              {section.activeItemCount === 1 ? "" : "s"}
+              {section.inactiveItemCount > 0
+                ? ` • ${section.inactiveItemCount} hidden`
+                : ""}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.badge,
+              section.isVisible ? styles.badgeVisible : styles.badgeMuted,
+            ]}
+          >
+            <Text style={styles.badgeText}>
+              {section.isVisible ? "Visible" : "Hidden"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.queueLabel}>Current requester view</Text>
+        <Text style={styles.queueValue}>{previewText}</Text>
+
+        <Text style={styles.queueLabel}>Admin note</Text>
+        <Text style={styles.queueValue}>
+          {section.isVisible
+            ? "Requesters can see this section as long as it still has live items."
+            : "This section is hidden right now. Restore one or more items to bring it back."}
+        </Text>
+
+        <View style={styles.actionRow}>
+          <AppButton
+            title="Manage Section"
+            onPress={() => openManageSection(section)}
+            style={styles.inlineAction}
+          />
+          <AppButton
+            title={section.isVisible ? "Hide Section" : "Restore All"}
+            variant="ghost"
+            onPress={() => performSectionVisibilityUpdate(section, !section.isVisible)}
+            disabled={busyKey === `section-toggle-${section.name}`}
+            style={styles.inlineAction}
+          />
+        </View>
+      </View>
+    );
+  };
+
+  const renderCancellationCard = (order) => {
     const statusMeta = getOrderStatusBadge(order);
     const summary = getOrderSummary(order);
     const customerLabel = getCustomerLabel(order, dashboardData.customersById);
     const volunteerLabel = order.volunteer_uid
       ? dashboardData.volunteersById[order.volunteer_uid]
       : "";
-    const itemsPreview =
-      summary.itemLabels.length > 0
-        ? summary.itemLabels.slice(0, 4).join(", ")
-        : "No item selections saved yet.";
 
     return (
-      <View key={`${mode}-${order.order_id}`} style={styles.queueCard}>
+      <View key={`cancel-${order.order_id}`} style={styles.queueCard}>
         <View style={styles.queueCardHeader}>
           <View style={styles.queueCardTitleBlock}>
             <Text style={styles.queueCardTitle}>{customerLabel}</Text>
@@ -651,7 +672,10 @@ export default function AdminDashboard() {
 
         <Text style={styles.queueLabel}>Menu snapshot</Text>
         <Text style={styles.queueValue}>
-          {summary.boxCount} box{summary.boxCount === 1 ? "" : "es"} • {itemsPreview}
+          {summary.boxCount} box{summary.boxCount === 1 ? "" : "es"} •{" "}
+          {summary.itemLabels.length > 0
+            ? summary.itemLabels.slice(0, 4).join(", ")
+            : "No item selections saved yet."}
         </Text>
 
         <Text style={styles.queueLabel}>Delivery address</Text>
@@ -674,21 +698,13 @@ export default function AdminDashboard() {
         ) : null}
 
         <View style={styles.actionRow}>
-          {mode === "changes" ? (
-            <AppButton
-              title="Edit Menu"
-              onPress={() => openMenuEditor(order)}
-              style={styles.inlineAction}
-            />
-          ) : (
-            <AppButton
-              title="Cancel Order"
-              variant="secondary"
-              onPress={() => handleCancelOrder(order)}
-              disabled={busyKey === `cancel-${order.order_id}`}
-              style={styles.inlineAction}
-            />
-          )}
+          <AppButton
+            title="Cancel Order"
+            variant="secondary"
+            onPress={() => handleCancelOrder(order)}
+            disabled={busyKey === `cancel-${order.order_id}`}
+            style={styles.inlineAction}
+          />
         </View>
       </View>
     );
@@ -765,20 +781,35 @@ export default function AdminDashboard() {
   };
 
   const renderActiveQueue = () => {
-    if (activeTab === "changes") {
+    if (activeTab === "menu") {
       if (loading) {
-        return <Text style={styles.emptyText}>Loading editable orders...</Text>;
+        return <Text style={styles.emptyText}>Loading menu sections...</Text>;
       }
 
-      if (menuQueue.length === 0) {
-        return (
-          <Text style={styles.emptyText}>
-            No pending or accepted orders need menu changes right now.
+      return (
+        <>
+          <View style={styles.menuSetupToolbar}>
+            <AppButton
+              title="Add Section"
+              variant="secondary"
+              onPress={openCreateSection}
+              style={styles.menuToolbarButton}
+            />
+          </View>
+          <Text style={styles.menuHelperText}>
+            This first pass uses the existing items table. New sections need a first
+            item, and hiding is safer than hard-deleting because old orders may still
+            reference these menu items.
           </Text>
-        );
-      }
-
-      return menuQueue.map((order) => renderQueueCard(order, "changes"));
+          {menuSections.length === 0 ? (
+            <Text style={styles.emptyText}>
+              No menu sections have been created yet.
+            </Text>
+          ) : (
+            menuSections.map(renderMenuSectionCard)
+          )}
+        </>
+      );
     }
 
     if (activeTab === "cancellations") {
@@ -794,7 +825,7 @@ export default function AdminDashboard() {
         );
       }
 
-      return cancellationQueue.map((order) => renderQueueCard(order, "cancellations"));
+      return cancellationQueue.map(renderCancellationCard);
     }
 
     if (loading) {
@@ -838,8 +869,8 @@ export default function AdminDashboard() {
             <Text style={styles.eyebrow}>Admin Triage</Text>
             <Text style={styles.title}>Focus the dashboard on decisions.</Text>
             <Text style={styles.subtitle}>
-              Prioritize order menu changes, cancellations, and complaint handling
-              before anything else.
+              Prioritize menu setup, cancellations, and complaint handling before
+              anything else.
             </Text>
             <View style={styles.heroNote}>
               <Text style={styles.heroNoteText}>{queueHeadline}</Text>
@@ -867,7 +898,7 @@ export default function AdminDashboard() {
 
         <View style={styles.metricsGrid}>
           {metricCards.map((card) => (
-            <View key={card.label} style={styles.metricCard}>
+            <View key={card.key} style={styles.metricCard}>
               <View
                 style={[
                   styles.metricAccent,
@@ -915,136 +946,230 @@ export default function AdminDashboard() {
       </ScrollView>
 
       <Modal
-        visible={Boolean(editingOrder && editDraft)}
+        visible={Boolean(sectionEditor)}
         transparent
         animationType="slide"
-        onRequestClose={closeMenuEditor}
+        onRequestClose={closeSectionEditor}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalOverlay}
         >
           <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalTitleBlock}>
-                <Text style={styles.modalTitle}>Update order menu</Text>
-                <Text style={styles.modalSubtitle}>
-                  {editingOrder
-                    ? `${getCustomerLabel(editingOrder, dashboardData.customersById)} • Order #${editingOrder.order_id}`
-                    : ""}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={closeMenuEditor} activeOpacity={0.7}>
-                <Text style={styles.modalClose}>Close</Text>
-              </TouchableOpacity>
-            </View>
-
-            {editDraft ? (
-              <ScrollView
-                contentContainerStyle={styles.modalContent}
-                showsVerticalScrollIndicator={false}
-              >
-                <View style={styles.stepperRow}>
-                  <Text style={styles.stepperLabel}>Boxes</Text>
-                  <View style={styles.stepperControls}>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => updateDraftBoxCount(editDraft.boxCount - 1)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.stepperButtonText}>−</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.stepperValue}>{editDraft.boxCount}</Text>
-                    <TouchableOpacity
-                      style={styles.stepperButton}
-                      onPress={() => updateDraftBoxCount(editDraft.boxCount + 1)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.stepperButtonText}>+</Text>
-                    </TouchableOpacity>
+            {sectionEditor ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalTitleBlock}>
+                    <Text style={styles.modalTitle}>
+                      {sectionEditor.mode === "create"
+                        ? "Create menu section"
+                        : "Manage section"}
+                    </Text>
+                    <Text style={styles.modalSubtitle}>
+                      {sectionEditor.mode === "create"
+                        ? "Add a new section and its first requester-visible item."
+                        : `Section currently saved as ${sectionEditor.originalName}.`}
+                    </Text>
                   </View>
+                  <TouchableOpacity onPress={closeSectionEditor} activeOpacity={0.7}>
+                    <Text style={styles.modalClose}>Close</Text>
+                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.boxTabRow}>
-                  {editDraft.boxes.map((box, index) => {
-                    const isActive = index === activeEditBoxIndex;
-                    return (
-                      <TouchableOpacity
-                        key={`box-tab-${box.boxNumber}`}
-                        style={[
-                          styles.boxTab,
-                          isActive ? styles.boxTabActive : null,
-                        ]}
-                        onPress={() => setActiveEditBoxIndex(index)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.boxTabText,
-                            isActive ? styles.boxTabTextActive : null,
-                          ]}
-                        >
-                          Box {box.boxNumber}
+                <ScrollView
+                  contentContainerStyle={styles.modalContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.inputLabel}>Section name</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Diet Restrictions"
+                    placeholderTextColor={theme.colors.mutedText}
+                    value={sectionEditor.name}
+                    onChangeText={(text) =>
+                      setSectionEditor((current) =>
+                        current
+                          ? {
+                              ...current,
+                              name: text,
+                            }
+                          : current,
+                      )
+                    }
+                  />
+
+                  {sectionEditor.mode === "create" ? (
+                    <>
+                      <Text style={styles.menuHelperText}>
+                        Sections are discovered from the items table today, so a new
+                        section needs its first item right away.
+                      </Text>
+                      <Text style={styles.inputLabel}>First item label</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Protein shake"
+                        placeholderTextColor={theme.colors.mutedText}
+                        value={sectionEditor.firstItemLabel}
+                        onChangeText={(text) =>
+                          setSectionEditor((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  firstItemLabel: text,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    </>
+                  ) : currentSection ? (
+                    <>
+                      <View style={styles.sectionSummaryCard}>
+                        <Text style={styles.queueLabel}>Section status</Text>
+                        <Text style={styles.queueValue}>
+                          {currentSection.isVisible
+                            ? `${currentSection.activeItemCount} live item${currentSection.activeItemCount === 1 ? "" : "s"} visible to requesters.`
+                            : "All items in this section are hidden right now."}
                         </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                        <Text style={styles.queueLabel}>Hidden items</Text>
+                        <Text style={styles.queueValue}>
+                          {currentSection.inactiveItemCount} hidden item
+                          {currentSection.inactiveItemCount === 1 ? "" : "s"}.
+                        </Text>
+                      </View>
 
-                <Text style={styles.editorHint}>
-                  Box {currentEditBox?.boxNumber || 1} has{" "}
-                  {currentEditBox?.selectedItemIds.length || 0} selected item
-                  {(currentEditBox?.selectedItemIds.length || 0) === 1 ? "" : "s"}.
-                </Text>
+                      <View style={styles.actionRow}>
+                        <AppButton
+                          title="Add Item"
+                          variant="secondary"
+                          onPress={() => openCreateItem(currentSection.name)}
+                          style={styles.inlineAction}
+                        />
+                        <AppButton
+                          title={currentSection.isVisible ? "Hide Section" : "Restore All"}
+                          variant="ghost"
+                          onPress={() =>
+                            performSectionVisibilityUpdate(
+                              currentSection,
+                              !currentSection.isVisible,
+                            )
+                          }
+                          disabled={busyKey === `section-toggle-${currentSection.name}`}
+                          style={styles.inlineAction}
+                        />
+                      </View>
 
-                {itemsByCategory.map(([category, items]) => (
-                  <View key={category} style={styles.categorySection}>
-                    <Text style={styles.categoryTitle}>{category}</Text>
-                    <View style={styles.chipWrap}>
-                      {items.map((item) => {
-                        const normalizedId = normalizeDraftItemId(item.id);
-                        const isSelected =
-                          currentEditBox?.selectedItemIds.includes(normalizedId);
-
-                        return (
-                          <TouchableOpacity
-                            key={item.id}
-                            style={[
-                              styles.itemChip,
-                              isSelected ? styles.itemChipSelected : null,
-                            ]}
-                            onPress={() => toggleDraftItem(item.id)}
-                            activeOpacity={0.8}
-                          >
-                            <Text
+                      <Text style={styles.sectionItemsTitle}>Items in this section</Text>
+                      {currentSection.items.map((item) => (
+                        <View key={item.id} style={styles.itemRowCard}>
+                          <View style={styles.itemRowTop}>
+                            <View style={styles.itemRowText}>
+                              <Text style={styles.itemRowTitle}>{item.label}</Text>
+                              <Text style={styles.itemRowMeta}>
+                                {item.active
+                                  ? "Visible to requesters"
+                                  : "Hidden from requesters"}
+                              </Text>
+                            </View>
+                            <View
                               style={[
-                                styles.itemChipText,
-                                isSelected ? styles.itemChipTextSelected : null,
+                                styles.badge,
+                                item.active ? styles.badgeVisible : styles.badgeMuted,
                               ]}
                             >
-                              {item.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                ))}
+                              <Text style={styles.badgeText}>
+                                {item.active ? "Live" : "Hidden"}
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.microActionRow}>
+                            <TouchableOpacity
+                              style={styles.microAction}
+                              onPress={() => openEditItem(item)}
+                              activeOpacity={0.8}
+                            >
+                              <Text style={styles.microActionText}>Rename</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.microAction}
+                              onPress={() =>
+                                handleToggleItemVisibility(item, !item.active)
+                              }
+                              activeOpacity={0.8}
+                              disabled={busyKey === `item-toggle-${item.id}`}
+                            >
+                              <Text style={styles.microActionText}>
+                                {item.active ? "Hide" : "Restore"}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))}
+                    </>
+                  ) : null}
 
-                <Text style={styles.inputLabel}>Special instructions</Text>
+                  <View style={styles.modalActions}>
+                    <AppButton
+                      title={
+                        sectionEditor.mode === "create"
+                          ? "Create Section"
+                          : "Save Section"
+                      }
+                      onPress={handleSaveSection}
+                      disabled={busyKey === "section-save"}
+                      style={styles.modalActionButton}
+                    />
+                    <AppButton
+                      title="Close"
+                      variant="ghost"
+                      onPress={closeSectionEditor}
+                      disabled={busyKey === "section-save"}
+                      style={styles.modalActionButton}
+                    />
+                  </View>
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        visible={Boolean(itemEditor)}
+        transparent
+        animationType="fade"
+        onRequestClose={closeItemEditor}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCardCompact}>
+            {itemEditor ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalTitleBlock}>
+                    <Text style={styles.modalTitle}>
+                      {itemEditor.mode === "create" ? "Add menu item" : "Rename item"}
+                    </Text>
+                    <Text style={styles.modalSubtitle}>
+                      {itemEditor.sectionName}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={closeItemEditor} activeOpacity={0.7}>
+                    <Text style={styles.modalClose}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.inputLabel}>Item label</Text>
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Any substitutions or admin notes to keep with the order..."
+                  placeholder="Sports drink"
                   placeholderTextColor={theme.colors.mutedText}
-                  multiline
-                  numberOfLines={4}
-                  value={editDraft.userNotes}
+                  value={itemEditor.label}
                   onChangeText={(text) =>
-                    setEditDraft((current) =>
+                    setItemEditor((current) =>
                       current
                         ? {
                             ...current,
-                            userNotes: text,
+                            label: text,
                           }
                         : current,
                     )
@@ -1053,23 +1178,23 @@ export default function AdminDashboard() {
 
                 <View style={styles.modalActions}>
                   <AppButton
-                    title="Save Menu Changes"
-                    onPress={handleSaveMenuChanges}
-                    disabled={busyKey === `save-menu-${editingOrder?.order_id}`}
+                    title={itemEditor.mode === "create" ? "Add Item" : "Save Item"}
+                    onPress={handleSaveItem}
+                    disabled={busyKey === "item-save"}
                     style={styles.modalActionButton}
                   />
                   <AppButton
-                    title="Discard"
+                    title="Close"
                     variant="ghost"
-                    onPress={closeMenuEditor}
-                    disabled={busyKey === `save-menu-${editingOrder?.order_id}`}
+                    onPress={closeItemEditor}
+                    disabled={busyKey === "item-save"}
                     style={styles.modalActionButton}
                   />
                 </View>
-              </ScrollView>
+              </>
             ) : null}
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
       <Modal
@@ -1369,6 +1494,18 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     marginBottom: theme.spacing.lg,
   },
+  menuSetupToolbar: {
+    marginBottom: theme.spacing.md,
+  },
+  menuToolbarButton: {
+    width: "100%",
+  },
+  menuHelperText: {
+    fontSize: 13,
+    color: theme.colors.mutedText,
+    lineHeight: 20,
+    marginBottom: theme.spacing.lg,
+  },
   queueCard: {
     backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.lg,
@@ -1417,6 +1554,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
+  badgeVisible: {
+    backgroundColor: theme.colors.successBg,
+    borderColor: theme.colors.successBorder,
+  },
+  badgeMuted: {
+    backgroundColor: "#F8FAFC",
+    borderColor: theme.colors.border,
+  },
   badgeText: {
     fontSize: 12,
     fontWeight: "700",
@@ -1456,6 +1601,14 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.xl,
   },
+  modalCardCompact: {
+    width: "100%",
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+  },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1484,110 +1637,6 @@ const styles = StyleSheet.create({
   modalContent: {
     paddingBottom: theme.spacing.sm,
   },
-  stepperRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: theme.spacing.lg,
-  },
-  stepperLabel: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: theme.colors.text,
-  },
-  stepperControls: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.md,
-  },
-  stepperButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperButtonText: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: theme.colors.text,
-    lineHeight: 24,
-  },
-  stepperValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: theme.colors.text,
-    minWidth: 18,
-    textAlign: "center",
-  },
-  boxTabRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-  },
-  boxTab: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  boxTabActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  boxTabText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: theme.colors.text,
-  },
-  boxTabTextActive: {
-    color: theme.colors.primaryText,
-  },
-  editorHint: {
-    fontSize: 13,
-    color: theme.colors.mutedText,
-    marginBottom: theme.spacing.lg,
-  },
-  categorySection: {
-    marginBottom: theme.spacing.lg,
-  },
-  categoryTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: theme.colors.primary,
-    marginBottom: theme.spacing.sm,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: theme.spacing.sm,
-  },
-  itemChip: {
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceMuted,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  itemChipSelected: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  itemChipText: {
-    fontSize: 13,
-    color: theme.colors.text,
-    fontWeight: "600",
-  },
-  itemChipTextSelected: {
-    color: theme.colors.primaryText,
-  },
   inputLabel: {
     fontSize: 14,
     fontWeight: "700",
@@ -1595,7 +1644,7 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   textInput: {
-    minHeight: 110,
+    minHeight: 54,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1605,6 +1654,67 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     color: theme.colors.text,
     textAlignVertical: "top",
+  },
+  sectionSummaryCard: {
+    marginTop: theme.spacing.lg,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+  },
+  sectionItemsTitle: {
+    marginTop: theme.spacing.lg,
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  itemRowCard: {
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  itemRowTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: theme.spacing.md,
+  },
+  itemRowText: {
+    flex: 1,
+  },
+  itemRowTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  itemRowMeta: {
+    fontSize: 13,
+    color: theme.colors.mutedText,
+    lineHeight: 19,
+  },
+  microActionRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  microAction: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  microActionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: theme.colors.text,
   },
   modalActions: {
     gap: theme.spacing.md,

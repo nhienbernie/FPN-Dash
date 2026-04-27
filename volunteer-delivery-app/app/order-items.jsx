@@ -34,7 +34,8 @@ export default function OrderItems() {
         .from("items")
         .select("id, key, label, category")
         .eq("active", true)
-        .order("category");
+        .order("category")
+        .order("label");
 
       if (error || !data) {
         Alert.alert("Error", "Failed to load items.");
