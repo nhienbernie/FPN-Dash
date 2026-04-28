@@ -9,7 +9,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -49,6 +52,8 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "jest": "^30.3.0",
+    "jest-expo": "^54.0.17",
     "typescript": "~5.9.2"
   },
   "private": true
