@@ -480,6 +480,7 @@ export default function VolunteerDashboard() {
     return (
       <View
         key={order.order_id}
+        testID={`volunteer-dashboard-order-${order.order_id}`}
         style={[
           styles.orderCard,
           {
@@ -515,6 +516,7 @@ export default function VolunteerDashboard() {
           disabled={acceptDisabled}
           onPress={() => setSelectedOrder(order)}
           style={styles.cardButton}
+          testID={`volunteer-dashboard-open-accept-${order.order_id}`}
         />
       </View>
     );
@@ -572,7 +574,9 @@ export default function VolunteerDashboard() {
               ]}
             >
               <Text style={styles.orderName}>{activeOrder.name}</Text>
-              <Text style={styles.orderMeta}>Status: {activeStatusMeta.label}</Text>
+              <Text testID="volunteer-dashboard-active-status" style={styles.orderMeta}>
+                Status: {activeStatusMeta.label}
+              </Text>
               <Text style={styles.orderMeta}>
                 Address: {activeOrder.delivery_address}
               </Text>
@@ -601,6 +605,7 @@ export default function VolunteerDashboard() {
                 onPress={openDeliveryDetails}
                 variant="secondary"
                 style={styles.cardButton}
+                testID="volunteer-dashboard-view-delivery-details"
               />
               {ACTIVE_VOLUNTEER_STATUSES.includes(activeOrder.status) ? (
                 <AppButton
@@ -609,6 +614,7 @@ export default function VolunteerDashboard() {
                   disabled={submitting}
                   variant="secondary"
                   style={styles.cardButton}
+                  testID="volunteer-dashboard-update-eta"
                 />
               ) : null}
               {activeOrder.status === ORDER_STATUS.ACCEPTED ? (
@@ -617,6 +623,7 @@ export default function VolunteerDashboard() {
                   onPress={() => handleAdvanceActiveOrder(ORDER_STATUS.IN_TRANSIT)}
                   disabled={submitting}
                   style={styles.cardButton}
+                  testID="volunteer-dashboard-start-delivery"
                 />
               ) : null}
               {activeOrder.status === ORDER_STATUS.IN_TRANSIT ? (
@@ -625,6 +632,7 @@ export default function VolunteerDashboard() {
                   onPress={() => handleAdvanceActiveOrder(ORDER_STATUS.DELIVERED)}
                   disabled={submitting}
                   style={styles.cardButton}
+                  testID="volunteer-dashboard-mark-delivered"
                 />
               ) : null}
             </View>
@@ -658,6 +666,7 @@ export default function VolunteerDashboard() {
                 disabled={submitting || previewEtaState === "loading"}
                 variant="secondary"
                 style={styles.refreshButton}
+                testID="volunteer-dashboard-refresh-eta-preview"
               />
               {availableOrders.map(renderAvailableOrder)}
             </>
@@ -710,12 +719,14 @@ export default function VolunteerDashboard() {
               onPress={handleAcceptOrder}
               disabled={submitting}
               style={styles.cardButton}
+              testID="volunteer-dashboard-confirm-accept"
             />
             <AppButton
               title="Close"
               variant="secondary"
               onPress={() => setSelectedOrder(null)}
               style={styles.cardButton}
+              testID="volunteer-dashboard-close-accept-modal"
             />
           </View>
         </View>

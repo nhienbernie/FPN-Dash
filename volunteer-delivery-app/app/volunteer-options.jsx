@@ -21,18 +21,21 @@ export default function VolunteerOptionsScreen() {
           title="Create Volunteer Account"
           onPress={() => router.push("/volunteer-signup")}
           style={styles.button}
+          testID="volunteer-options-signup"
         />
         <AppButton
           title="Sign In"
           variant="secondary"
           onPress={() => router.push("/volunteer-signin")}
           style={styles.button}
+          testID="volunteer-options-signin"
         />
         <AppButton
           title="Back Home"
           variant="ghost"
           onPress={() => router.push("/mode-select")}
           style={styles.button}
+          testID="volunteer-options-back-home"
         />
       </View>
     </View>

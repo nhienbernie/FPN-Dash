@@ -121,6 +121,7 @@ export default function OrderItems() {
             {items.map(({ id, label: itemLabel }) => (
               <TouchableOpacity
                 key={id}
+                testID={`order-items-box-${currentBox}-item-${id}`}
                 style={styles.checkboxRow}
                 onPress={() => toggleItem(id)}
                 activeOpacity={0.7}
@@ -145,6 +146,7 @@ export default function OrderItems() {
           title={isLastBox ? "Review Order" : "Next Box"}
           onPress={handleContinue}
           style={styles.button}
+          testID="order-items-continue"
         />
       </ScrollView>
     </View>

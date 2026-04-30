@@ -285,6 +285,7 @@ export default function RequesterScreen() {
             <AppButton
               title="I Understand"
               onPress={() => setDisclaimerVisible(false)}
+              testID="requester-disclaimer-accept"
             />
           </View>
         </View>
@@ -322,6 +323,7 @@ export default function RequesterScreen() {
               <View key={field.key} style={styles.fieldWrapper}>
                 <Text style={styles.label}>{field.label}</Text>
                 <TextInput
+                  testID={`requester-${field.key}`}
                   value={formValues[field.key]}
                   onChangeText={(text) => handleChange(field.key, text)}
                   placeholder={field.placeholder}
@@ -346,6 +348,7 @@ export default function RequesterScreen() {
                 <View style={styles.fieldWrapper}>
                   <Text style={styles.label}>Verification Code</Text>
                   <TextInput
+                    testID="requester-verification-code"
                     value={verificationCode}
                     onChangeText={(text) => {
                       setVerificationCode(
@@ -377,6 +380,7 @@ export default function RequesterScreen() {
                     onPress={handleSendCode}
                     disabled={submitState !== "idle"}
                     style={[styles.actionButton, styles.backButton]}
+                    testID="requester-send-again"
                   />
                   <AppButton
                     title={
@@ -385,6 +389,7 @@ export default function RequesterScreen() {
                     onPress={handleVerifyAndContinue}
                     disabled={submitState !== "idle"}
                     style={styles.actionButton}
+                    testID="requester-verify"
                   />
                 </View>
               </>
@@ -394,6 +399,7 @@ export default function RequesterScreen() {
                 onPress={handleSendCode}
                 disabled={submitState !== "idle"}
                 style={styles.submitButton}
+                testID="requester-send-code"
               />
             )}
           </View>

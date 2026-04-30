@@ -36,6 +36,7 @@ export default function OrderBoxes() {
 
       <View style={styles.stepper}>
         <TouchableOpacity
+          testID="order-boxes-decrement"
           style={[styles.stepButton, boxCount === 1 && styles.stepButtonDisabled]}
           onPress={decrement}
           activeOpacity={0.7}
@@ -46,6 +47,7 @@ export default function OrderBoxes() {
         <Text style={styles.count}>{boxCount}</Text>
 
         <TouchableOpacity
+          testID="order-boxes-increment"
           style={styles.stepButton}
           onPress={increment}
           activeOpacity={0.7}
@@ -58,6 +60,7 @@ export default function OrderBoxes() {
         title="Continue"
         onPress={handleContinue}
         style={styles.button}
+        testID="order-boxes-continue"
       />
     </View>
   );

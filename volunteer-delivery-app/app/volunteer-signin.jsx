@@ -157,6 +157,7 @@ export default function SignInScreen() {
             <View key={field.key} style={styles.fieldWrapper}>
               <Text style={styles.label}>{field.label}</Text>
               <TextInput
+                testID={`volunteer-signin-${field.key}`}
                 value={formValues[field.key]}
                 onChangeText={(text) => handleChange(field.key, text)}
                 placeholder={field.placeholder}
@@ -179,6 +180,7 @@ export default function SignInScreen() {
             onPress={handleSubmit}
             disabled={submitState === "loading"}
             style={styles.submitButton}
+            testID="volunteer-signin-submit"
           />
         </View>
       </ScrollView>

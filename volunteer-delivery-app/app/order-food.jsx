@@ -74,6 +74,7 @@ export default function OrderFood() {
           title="Start Order"
           onPress={() => router.push("/order-boxes")}
           style={styles.button}
+          testID="order-food-start-order"
         />
         {address ? (
           <Text style={styles.address}>

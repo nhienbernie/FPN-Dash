@@ -35,11 +35,13 @@ export default function AppButton({
   style,
   textStyle,
   disabled = false,
+  testID,
 }) {
   const colors = VARIANTS[variant] || VARIANTS.primary;
 
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       disabled={disabled}
       style={({ pressed }) => [

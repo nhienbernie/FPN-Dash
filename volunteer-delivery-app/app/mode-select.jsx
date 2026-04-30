@@ -22,18 +22,21 @@ export default function ModeSelectScreen() {
           title="Volunteer Portal"
           onPress={() => router.push("/volunteer-options")}
           style={styles.button}
+          testID="mode-select-volunteer"
         />
         <AppButton
           title="Request Food"
           variant="secondary"
           onPress={() => router.push("/requester")}
           style={styles.button}
+          testID="mode-select-requester"
         />
         <AppButton
           title="Admin Login"
           variant="ghost"
           onPress={() => router.push("/admin-dashboard")}
           style={styles.button}
+          testID="mode-select-admin"
         />
       </View>
     </View>

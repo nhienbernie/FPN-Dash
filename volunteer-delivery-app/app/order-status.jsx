@@ -253,6 +253,7 @@ export default function OrderStatus() {
           title="Place an Order"
           onPress={() => router.replace("/order-food")}
           style={styles.button}
+          testID="order-status-place-order"
         />
         {address && (
           <Text style={styles.address}>delivering to {formatAddress(address)}</Text>
@@ -292,7 +293,9 @@ export default function OrderStatus() {
         <Text style={styles.statusTimestamp}>
           Order placed at: {orderTime ? orderTime.toLocaleString() : ""}
         </Text>
-        <Text style={styles.statusLabel}>Status: {statusMeta.label}</Text>
+        <Text testID="order-status-current-status" style={styles.statusLabel}>
+          Status: {statusMeta.label}
+        </Text>
         <Text style={styles.statusDescription}>{statusMeta.description}</Text>
         <OrderProgress status={order.status} />
 
@@ -376,6 +379,7 @@ export default function OrderStatus() {
         onPress={handleRefresh}
         disabled={loading}
         style={styles.button}
+        testID="order-status-refresh"
       />
 
       {showCancelAction ? (
@@ -385,6 +389,7 @@ export default function OrderStatus() {
           disabled={loading}
           variant="secondary"
           style={styles.button}
+          testID="order-status-cancel"
         />
       ) : null}
 

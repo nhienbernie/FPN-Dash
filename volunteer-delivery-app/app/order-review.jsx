@@ -175,6 +175,7 @@ export default function OrderReview() {
 
         <Text style={styles.sectionTitle}>Special Instructions</Text>
         <TextInput
+          testID="order-review-notes"
           style={styles.textInput}
           placeholder="Any allergies, notes, or requests..."
           placeholderTextColor={theme.colors.mutedText}
@@ -190,6 +191,7 @@ export default function OrderReview() {
           onPress={handleConfirm}
           disabled={loading}
           style={styles.button}
+          testID="order-review-confirm"
         />
         {loading && <Text style={styles.loadingText}>Placing order...</Text>}
       </ScrollView>
