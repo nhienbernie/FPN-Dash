@@ -109,12 +109,14 @@ export default function ConfirmDelivery() {
           title="Confirm Delivery"
           onPress={() => setModalVisible(true)}
           style={{ marginTop: theme.spacing.md }}
+          testID="confirm-delivery-open-confirm"
         />
         <AppButton
           title="Cancel Delivery"
           onPress={() => setCancelModalVisible(true)}
           variant="secondary"
           style={{ marginTop: theme.spacing.md }}
+          testID="confirm-delivery-open-cancel"
         />
         <AppButton
           title="Report Concern"
@@ -128,6 +130,7 @@ export default function ConfirmDelivery() {
           textStyle={{ color: "#ffffff" }}
         />
         <TouchableOpacity
+          testID="confirm-delivery-back-dashboard"
           style={{ marginTop: theme.spacing.md }}
           onPress={() => router.push("/volunteer-dashboard")}
         >
@@ -151,11 +154,13 @@ export default function ConfirmDelivery() {
                 title="Yes"
                 onPress={handleConfirmDelivery}
                 style={{ marginRight: theme.spacing.sm }}
+                testID="confirm-delivery-confirm-yes"
               />
               <AppButton
                 title="No"
                 variant="secondary"
                 onPress={() => setModalVisible(false)}
+                testID="confirm-delivery-confirm-no"
               />
             </View>
           </View>
@@ -178,11 +183,13 @@ export default function ConfirmDelivery() {
                 title="Yes"
                 onPress={handleCancelDelivery}
                 style={{ marginRight: theme.spacing.sm }}
+                testID="confirm-delivery-cancel-yes"
               />
               <AppButton
                 title="No"
                 variant="secondary"
                 onPress={() => setCancelModalVisible(false)}
+                testID="confirm-delivery-cancel-no"
               />
             </View>
           </View>

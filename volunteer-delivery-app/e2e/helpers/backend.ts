@@ -15,6 +15,32 @@ type BoxRecord = {
   box_id: number;
 };
 
+type RequesterAddress = {
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  zip: string;
+};
+
+export type RequesterSeed = {
+  phone: string;
+  dob: string;
+  firstName: string;
+  lastName: string;
+  address: RequesterAddress;
+};
+
+type CustomerRecord = {
+  uid: string;
+  first_name: string;
+  last_name: string;
+  address: string;
+};
+
+const WORKAROUND_PREFIX = "WORKAROUND_ORDER_META::";
+const DEFAULT_REQUESTER_PASSWORD = "e2e-requester-password";
+
 const APP_ROOT = process.cwd();
 const ENV_PATH = path.join(APP_ROOT, ".env");
 
@@ -72,6 +98,42 @@ function createAdminClient(): SupabaseClient {
 
 export const adminSupabase = createAdminClient();
 
+function buildRequesterEmail(phone: string) {
+  return `requester+${phone}@demo.local`;
+}
+
+function buildRequesterUsername(phone: string) {
+  return `requester_${phone}`;
+}
+
+function formatAddress(address: RequesterAddress) {
+  const cityState = [address.city, address.state].filter(Boolean).join(", ");
+  const cityStateZip = [cityState, address.zip].filter(Boolean).join(" ");
+  return [address.line1, address.line2, cityStateZip].filter(Boolean).join(", ");
+}
+
+function buildOrderNotes({
+  selectedItems = [],
+  userNotes = "",
+}: {
+  selectedItems?: string[];
+  userNotes?: string;
+}) {
+  const cleanedItems = selectedItems
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+  const cleanedNotes = String(userNotes ?? "").trim();
+
+  if (cleanedItems.length === 0) {
+    return cleanedNotes || null;
+  }
+
+  return `${WORKAROUND_PREFIX}${JSON.stringify({
+    selectedItems: cleanedItems,
+    userNotes: cleanedNotes,
+  })}`;
+}
+
 async function listAuthUsersByEmail(email: string) {
   let page = 1;
 
@@ -110,6 +172,34 @@ export async function getRequesterUidByPhone(phone: string) {
   }
 
   return data?.uid ?? null;
+}
+
+async function getRequesterByPhone(phone: string) {
+  const { data, error } = await adminSupabase
+    .from("customers")
+    .select("uid, first_name, last_name, address")
+    .eq("phone_number", phone)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as CustomerRecord | null) ?? null;
+}
+
+async function getRequesterByUid(uid: string) {
+  const { data, error } = await adminSupabase
+    .from("customers")
+    .select("uid, first_name, last_name, address")
+    .eq("uid", uid)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data as CustomerRecord | null) ?? null;
 }
 
 export async function getVolunteerUidByEmail(email: string) {
@@ -200,19 +290,21 @@ export async function deleteOrdersByIds(orderIds: number[]) {
 }
 
 export async function resetTestState({
-  requesterPhone,
+  requesterPhones,
   volunteerEmail,
 }: {
-  requesterPhone: string;
+  requesterPhones: string[];
   volunteerEmail: string;
 }) {
-  const requesterUid = await getRequesterUidByPhone(requesterPhone);
   const volunteerUid = await getVolunteerUidByEmail(volunteerEmail);
   const orderIds = new Set<number>();
 
-  if (requesterUid) {
-    const requesterOrders = await listOrdersByColumn("customer_uid", requesterUid);
-    requesterOrders.forEach((order) => orderIds.add(order.order_id));
+  for (const requesterPhone of requesterPhones) {
+    const requesterUid = await getRequesterUidByPhone(requesterPhone);
+    if (requesterUid) {
+      const requesterOrders = await listOrdersByColumn("customer_uid", requesterUid);
+      requesterOrders.forEach((order) => orderIds.add(order.order_id));
+    }
   }
 
   if (volunteerUid) {
@@ -255,4 +347,121 @@ export async function waitForLatestRequesterOrder(
   }
 
   throw new Error("Timed out waiting for requester order to be created.");
+}
+
+export async function ensureRequesterProfile(requester: RequesterSeed) {
+  const email = buildRequesterEmail(requester.phone);
+  const username = buildRequesterUsername(requester.phone);
+  const metadata = {
+    role: "requester",
+    first_name: requester.firstName,
+    last_name: requester.lastName,
+    phone_number: requester.phone,
+    username,
+  };
+
+  const existingAuthUser = await listAuthUsersByEmail(email);
+  let authUserId = existingAuthUser?.id ?? null;
+
+  if (authUserId) {
+    const { data, error } = await adminSupabase.auth.admin.updateUserById(authUserId, {
+      email,
+      password: DEFAULT_REQUESTER_PASSWORD,
+      email_confirm: true,
+      user_metadata: metadata,
+    });
+
+    if (error || !data.user) {
+      throw new Error(error?.message || "Unable to update requester auth user.");
+    }
+
+    authUserId = data.user.id;
+  } else {
+    const { data, error } = await adminSupabase.auth.admin.createUser({
+      email,
+      password: DEFAULT_REQUESTER_PASSWORD,
+      email_confirm: true,
+      user_metadata: metadata,
+    });
+
+    if (error || !data.user) {
+      throw new Error(error?.message || "Unable to create requester auth user.");
+    }
+
+    authUserId = data.user.id;
+  }
+
+  const payload = {
+    uid: authUserId,
+    first_name: requester.firstName,
+    last_name: requester.lastName,
+    phone_number: requester.phone,
+    dob: requester.dob,
+    address: formatAddress(requester.address),
+    username,
+    email,
+    IsVolunteer: false,
+  };
+
+  const existingCustomerByPhone = await getRequesterByPhone(requester.phone);
+  const existingCustomerByUid = authUserId
+    ? await getRequesterByUid(authUserId)
+    : null;
+  const existingCustomer = existingCustomerByPhone ?? existingCustomerByUid;
+
+  if (existingCustomer) {
+    const { error } = await adminSupabase
+      .from("customers")
+      .update(payload)
+      .eq("uid", existingCustomer.uid);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  } else {
+    const { error } = await adminSupabase.from("customers").insert(payload);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  return getRequesterByPhone(requester.phone);
+}
+
+export async function createPendingOrderForRequester(
+  requester: RequesterSeed,
+  {
+    selectedItems = [],
+    userNotes = "",
+    boxCount = 1,
+  }: {
+    selectedItems?: string[];
+    userNotes?: string;
+    boxCount?: number;
+  } = {},
+) {
+  const customer = await ensureRequesterProfile(requester);
+  if (!customer?.uid) {
+    throw new Error(`Requester profile missing for phone ${requester.phone}.`);
+  }
+
+  const { data, error } = await adminSupabase
+    .from("orders")
+    .insert({
+      customer_uid: customer.uid,
+      name: customer.first_name,
+      delivery_address: customer.address,
+      status: "pending",
+      notes: buildOrderNotes({ selectedItems, userNotes }),
+      box_count: boxCount,
+    })
+    .select("order_id, status, customer_uid")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Unable to create pending order.");
+  }
+
+  return data;
 }
