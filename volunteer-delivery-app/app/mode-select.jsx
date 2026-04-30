@@ -30,7 +30,7 @@ export default function ModeSelectScreen() {
           style={styles.button}
         />
         <AppButton
-          title="Admin Demo"
+          title="Admin Login"
           variant="ghost"
           onPress={() => router.push("/admin-dashboard")}
           style={styles.button}

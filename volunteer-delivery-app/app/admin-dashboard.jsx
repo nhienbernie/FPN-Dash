@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -33,6 +34,10 @@ import {
 } from "../lib/adminDashboard";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
+
+const ADMIN_USERNAME = "admin";
+const ADMIN_PASSWORD = "password";
+const ADMIN_AUTH_STORAGE_KEY = "admin-dashboard-authenticated";
 
 const TAB_COPY = {
   menu: {
@@ -75,6 +80,14 @@ function buildProfileMap(rows) {
 }
 
 export default function AdminDashboard() {
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [credentials, setCredentials] = useState({
+    username: "",
+    password: "",
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyKey, setBusyKey] = useState("");
@@ -189,12 +202,94 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const restoreAdminSession = async () => {
+      try {
+        const savedValue = await AsyncStorage.getItem(ADMIN_AUTH_STORAGE_KEY);
+
+        if (isMounted) {
+          setIsAuthenticated(savedValue === "true");
+        }
+      } catch (error) {
+        console.error("Error restoring admin auth:", error);
+      } finally {
+        if (isMounted) {
+          setAuthReady(true);
+        }
+      }
+    };
+
+    restoreAdminSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      return;
+    }
+
     loadDashboard();
-  }, [loadDashboard]);
+  }, [authReady, isAuthenticated, loadDashboard]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await loadDashboard({ silent: true });
+  };
+
+  const handleLogin = async () => {
+    const username = credentials.username.trim();
+    const password = credentials.password;
+
+    if (!username || !password) {
+      setLoginError("Enter the admin username and password.");
+      return;
+    }
+
+    if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+      setLoginError("Incorrect username or password.");
+      return;
+    }
+
+    setAuthBusy(true);
+    setLoginError("");
+
+    try {
+      await AsyncStorage.setItem(ADMIN_AUTH_STORAGE_KEY, "true");
+      setIsAuthenticated(true);
+      setCredentials({
+        username: "",
+        password: "",
+      });
+    } catch (error) {
+      console.error("Error saving admin auth:", error);
+      setLoginError("Unable to save the admin session. Please try again.");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setAuthBusy(true);
+
+    try {
+      await AsyncStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
+      setIsAuthenticated(false);
+      setLoginError("");
+      setCredentials({
+        username: "",
+        password: "",
+      });
+      router.replace("/mode-select");
+    } catch (error) {
+      console.error("Error clearing admin auth:", error);
+      Alert.alert("Unable to Log Out", "Please try again.");
+    } finally {
+      setAuthBusy(false);
+    }
   };
 
   const metrics = useMemo(
@@ -856,6 +951,107 @@ export default function AdminDashboard() {
     ? getOrderSummary(focusedComplaintOrder)
     : null;
 
+  if (!authReady) {
+    return (
+      <View style={styles.authShell}>
+        <View style={styles.authCard}>
+          <Text style={styles.eyebrow}>Admin Access</Text>
+          <Text style={styles.title}>Checking saved admin session...</Text>
+          <Text style={styles.subtitle}>
+            Hold on while the dashboard verifies whether this device is already signed in.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.authShell}
+      >
+        <View style={styles.authCard}>
+          <Text style={styles.eyebrow}>Admin Access</Text>
+          <Text style={styles.title}>Sign in to open the dashboard.</Text>
+          <Text style={styles.subtitle}>
+            Use the single shared admin credential set for this demo view.
+          </Text>
+
+          <View style={styles.authHint}>
+            <Text style={styles.authHintText}>Username: admin</Text>
+            <Text style={styles.authHintText}>Password: password</Text>
+          </View>
+
+          <Text style={styles.inputLabel}>Username</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="admin"
+            placeholderTextColor={theme.colors.mutedText}
+            value={credentials.username}
+            onChangeText={(text) => {
+              setCredentials((current) => ({
+                ...current,
+                username: text,
+              }));
+              if (loginError) {
+                setLoginError("");
+              }
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!authBusy}
+            returnKeyType="next"
+          />
+
+          <Text style={[styles.inputLabel, styles.authPasswordLabel]}>Password</Text>
+          <TextInput
+            style={styles.textInput}
+            placeholder="password"
+            placeholderTextColor={theme.colors.mutedText}
+            value={credentials.password}
+            onChangeText={(text) => {
+              setCredentials((current) => ({
+                ...current,
+                password: text,
+              }));
+              if (loginError) {
+                setLoginError("");
+              }
+            }}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+            editable={!authBusy}
+            onSubmitEditing={() => {
+              void handleLogin();
+            }}
+          />
+
+          {loginError ? <Text style={styles.authErrorText}>{loginError}</Text> : null}
+
+          <View style={styles.authActions}>
+            <AppButton
+              title={authBusy ? "Signing In..." : "Sign In"}
+              onPress={() => {
+                void handleLogin();
+              }}
+              disabled={authBusy}
+              style={styles.modalActionButton}
+            />
+            <AppButton
+              title="Back Home"
+              variant="ghost"
+              onPress={() => router.replace("/mode-select")}
+              disabled={authBusy}
+              style={styles.modalActionButton}
+            />
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -892,6 +1088,15 @@ export default function AdminDashboard() {
               onPress={() => router.push("/mode-select")}
               variant="ghost"
               style={styles.heroButton}
+            />
+            <AppButton
+              title="Log Out"
+              onPress={() => {
+                void handleLogout();
+              }}
+              variant="danger"
+              style={styles.heroButton}
+              disabled={authBusy}
             />
           </View>
         </View>
@@ -1346,6 +1551,54 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
+  authShell: {
+    flex: 1,
+    justifyContent: "center",
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+  },
+  authCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    elevation: 4,
+  },
+  authHint: {
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.infoBg,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.infoBorder,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  authHintText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.infoText,
+  },
+  authPasswordLabel: {
+    marginTop: theme.spacing.lg,
+  },
+  authErrorText: {
+    marginTop: theme.spacing.md,
+    fontSize: 14,
+    color: theme.colors.errorText,
+  },
+  authActions: {
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.xl,
+  },
   content: {
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.xxl,
@@ -1371,6 +1624,7 @@ const styles = StyleSheet.create({
   },
   heroActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing.md,
   },
   heroButton: {
