@@ -1,7 +1,5 @@
-// helper to translate an address into {latitude, longitude}
-// uses the internal `/api/geocode` endpoint so the logic is centralized
-// and can be reused when inserting or updating orders.
-// it mirrors the logic in `confirm-delivery` to compute the correct host.
+// Helper to translate an address into { latitude, longitude }.
+// It prefers expo-location and falls back to a direct Nominatim lookup.
 
 import * as Location from "expo-location";
 
