@@ -194,6 +194,9 @@ export default function ConfirmDelivery() {
         onClose={() => setReportModalVisible(false)}
         orderId={orderDetails.order_id}
         reportedId={orderDetails.customer_uid}
+        reporterRole="volunteer"
+        reportedRole="requester"
+        subjectLabel="requester"
       />
     </View>
   );

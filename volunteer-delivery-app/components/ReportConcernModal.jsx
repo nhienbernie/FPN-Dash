@@ -12,7 +12,15 @@ const REASON_LABELS = {
   other: "Other",
 };
 
-export default function ReportConcernModal({ visible, onClose, orderId, reportedId }) {
+export default function ReportConcernModal({
+  visible,
+  onClose,
+  orderId,
+  reportedId,
+  reporterRole = "volunteer",
+  reportedRole = "requester",
+  subjectLabel = "person",
+}) {
   const [selectedReason, setSelectedReason] = useState(null);
   const [reportDescription, setReportDescription] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
@@ -32,18 +40,28 @@ export default function ReportConcernModal({ visible, onClose, orderId, reported
       return;
     }
 
+    if (!orderId || !reportedId) {
+      setReportError(`We couldn't identify the ${subjectLabel} for this report.`);
+      return;
+    }
+
     setReportSubmitting(true);
     setReportError("");
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
+      if (!user?.id) {
+        setReportError("Please sign in again and retry.");
+        return;
+      }
+
       const { error } = await supabase.from("reports").insert({
         order_id: orderId,
         reporter_id: user.id,
-        reporter_role: "volunteer",
+        reporter_role: reporterRole,
         reported_id: reportedId,
-        reported_role: "requester",
+        reported_role: reportedRole,
         reason: selectedReason,
         description: reportDescription.trim() || null,
         status: "pending",
@@ -81,7 +99,9 @@ export default function ReportConcernModal({ visible, onClose, orderId, reported
         >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Report a Concern</Text>
-            <Text style={styles.modalSubtitle}>Select a reason</Text>
+            <Text style={styles.modalSubtitle}>
+              Select a reason for reporting this {subjectLabel}
+            </Text>
 
             {REASONS.map((reason) => (
               <TouchableOpacity

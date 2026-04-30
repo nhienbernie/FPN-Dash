@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
+import ReportConcernModal from "../components/ReportConcernModal";
 import {
   calculateDistanceMiles,
   estimateTravelMinutes,
@@ -71,6 +72,7 @@ export default function OrderStatus() {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [address, setAddress] = useState(null);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [deliveryEstimate, setDeliveryEstimate] = useState({
     state: "idle",
   });
@@ -181,6 +183,7 @@ export default function OrderStatus() {
   const showCancelAction = order && canCancelOrder(order.status);
   const disableCancelAction =
     order && !showCancelAction && !showDeliveredActions;
+  const canReportVolunteer = Boolean(order?.order_id && order?.volunteer_uid);
 
   useEffect(() => {
     let cancelled = false;
@@ -402,12 +405,32 @@ export default function OrderStatus() {
         />
       ) : null}
 
+      {canReportVolunteer ? (
+        <AppButton
+          title="Report Concern"
+          onPress={() => setReportModalVisible(true)}
+          disabled={loading}
+          variant="secondary"
+          style={styles.button}
+        />
+      ) : null}
+
       {address && (
         <Text style={styles.address}>delivering to {formatAddress(address)}</Text>
       )}
       <TouchableOpacity onPress={() => Linking.openURL('tel:+14437644960')}>
         <Text style={styles.link}>need help? Contact FPN</Text>
       </TouchableOpacity>
+
+      <ReportConcernModal
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        orderId={order?.order_id}
+        reportedId={order?.volunteer_uid}
+        reporterRole="requester"
+        reportedRole="volunteer"
+        subjectLabel="volunteer"
+      />
     </View>
   );
 }
