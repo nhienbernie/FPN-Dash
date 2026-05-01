@@ -32,6 +32,7 @@ import {
   isComplaintOpen,
   isOrderCancellable,
 } from "../lib/adminDashboard";
+import { deleteOrderById } from "../lib/orderDeletion";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -592,14 +593,7 @@ export default function AdminDashboard() {
     setBusyKey(`cancel-${order.order_id}`);
 
     try {
-      const { error } = await supabase
-        .from("orders")
-        .delete()
-        .eq("order_id", order.order_id);
-
-      if (error) {
-        throw error;
-      }
+      await deleteOrderById(order.order_id);
 
       if (focusedComplaint?.order_id === order.order_id) {
         setFocusedComplaint(null);
@@ -650,20 +644,44 @@ export default function AdminDashboard() {
         .from("reports")
         .update({ status: nextStatus })
         .eq("order_id", report.order_id)
-        .eq("reporter_id", report.reporter_id)
-        .eq("status", report.status);
+        .eq("reporter_id", report.reporter_id);
 
       if (report.created_at) {
         query = query.eq("created_at", report.created_at);
       }
 
-      const { error } = await query;
+      const { data, error } = await query.select(
+        "order_id, reporter_id, created_at, status",
+      );
 
       if (error) {
         throw error;
       }
 
+      if (!data || data.length === 0) {
+        throw new Error("No matching complaint was updated.");
+      }
+
       setFocusedComplaint(null);
+      setDashboardData((current) => ({
+        ...current,
+        reports: current.reports.map((entry) => {
+          const matchesOrder = entry.order_id === report.order_id;
+          const matchesReporter = entry.reporter_id === report.reporter_id;
+          const matchesCreatedAt = report.created_at
+            ? entry.created_at === report.created_at
+            : true;
+
+          if (!matchesOrder || !matchesReporter || !matchesCreatedAt) {
+            return entry;
+          }
+
+          return {
+            ...entry,
+            status: nextStatus,
+          };
+        }),
+      }));
       await loadDashboard({ silent: true });
     } catch (error) {
       console.error("Error updating report status:", error);
@@ -1482,34 +1500,6 @@ export default function AdminDashboard() {
                   ) : null}
 
                   <View style={styles.modalActions}>
-                    {focusedComplaint.status === "pending" ? (
-                      <AppButton
-                        title="Mark Under Review"
-                        variant="secondary"
-                        onPress={() =>
-                          handleSetReportStatus(focusedComplaint, "reviewed")
-                        }
-                        disabled={
-                          busyKey === `report-${focusedComplaint.order_id}-reviewed`
-                        }
-                        style={styles.modalActionButton}
-                      />
-                    ) : null}
-
-                    {focusedComplaint.status !== "escalated" ? (
-                      <AppButton
-                        title="Escalate"
-                        variant="ghost"
-                        onPress={() =>
-                          handleSetReportStatus(focusedComplaint, "escalated")
-                        }
-                        disabled={
-                          busyKey === `report-${focusedComplaint.order_id}-escalated`
-                        }
-                        style={styles.modalActionButton}
-                      />
-                    ) : null}
-
                     <AppButton
                       title="Resolve"
                       onPress={() =>

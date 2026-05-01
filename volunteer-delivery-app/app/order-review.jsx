@@ -76,9 +76,36 @@ export default function OrderReview() {
         return;
       }
 
-      const selectedLabels = [...new Set(allSelections.flat())].map(
+      const selectedItemIds = [...new Set(allSelections.flat())];
+      const selectedLabels = selectedItemIds.map(
         (itemId) => itemLabels[itemId] ?? String(itemId)
       );
+
+      if (selectedItemIds.length > 0) {
+        const { data: activeItems, error: activeItemsError } = await supabase
+          .from("items")
+          .select("id")
+          .in("id", selectedItemIds)
+          .eq("active", true);
+
+        if (activeItemsError) {
+          Alert.alert("Error", "Failed to validate the latest menu.");
+          return;
+        }
+
+        const availableIds = new Set((activeItems ?? []).map((item) => item.id));
+        const missingSelection = selectedItemIds.some(
+          (itemId) => !availableIds.has(itemId),
+        );
+
+        if (missingSelection) {
+          Alert.alert(
+            "Menu Updated",
+            "Some selected items are no longer available. Please go back and review your boxes again.",
+          );
+          return;
+        }
+      }
 
       const { data: newOrder, error: orderError } = await supabase
         .from("orders")

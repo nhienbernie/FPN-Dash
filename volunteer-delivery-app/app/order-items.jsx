@@ -1,7 +1,6 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,7 +8,7 @@ import {
   View,
 } from "react-native";
 import AppButton from "../components/AppButton";
-import { supabase } from "../services/supabase";
+import { useLiveMenuItems } from "../lib/menuRealtime";
 import { theme } from "../theme";
 
 const CATEGORY_SUBTITLES = {
@@ -24,43 +23,29 @@ export default function OrderItems() {
     ? JSON.parse(params.prevSelections)
     : [];
 
-  const [categories, setCategories] = useState([]);
   const [selected, setSelected] = useState([]);
-  const [initializing, setInitializing] = useState(true);
+  const [menuNotice, setMenuNotice] = useState("");
+  const { categories, activeItemIds, initializing, errorMessage } = useLiveMenuItems();
 
   useEffect(() => {
-    const fetchItems = async () => {
-      const { data, error } = await supabase
-        .from("items")
-        .select("id, key, label, category")
-        .eq("active", true)
-        .order("category")
-        .order("label");
+    const availableIds = new Set(activeItemIds);
 
-      if (error || !data) {
-        Alert.alert("Error", "Failed to load items.");
-        setInitializing(false);
-        return;
+    setSelected((current) => {
+      const next = current.filter((itemId) => availableIds.has(itemId));
+
+      if (next.length !== current.length) {
+        setMenuNotice("The menu changed, so unavailable selections were removed.");
       }
 
-      const grouped = {};
-      for (const item of data) {
-        if (!grouped[item.category]) {
-          grouped[item.category] = [];
-        }
-        grouped[item.category].push(item);
-      }
-
-      setCategories(
-        Object.entries(grouped).map(([label, items]) => ({ label, items }))
-      );
-      setInitializing(false);
-    };
-
-    fetchItems();
-  }, []);
+      return next;
+    });
+  }, [activeItemIds]);
 
   const toggleItem = (id) => {
+    if (menuNotice) {
+      setMenuNotice("");
+    }
+
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
@@ -107,6 +92,14 @@ export default function OrderItems() {
         </Text>
         <Text style={styles.title}>Select Items</Text>
         <Text style={styles.subtitle}>Choose what you&apos;d like in this box</Text>
+        {errorMessage ? <Text style={styles.menuStatusText}>{errorMessage}</Text> : null}
+        {menuNotice ? <Text style={styles.menuStatusText}>{menuNotice}</Text> : null}
+
+        {categories.length === 0 ? (
+          <Text style={styles.emptyStateText}>
+            No menu items are available right now. Please check back soon.
+          </Text>
+        ) : null}
 
         {categories.map(({ label, items }) => (
           <View key={label} style={styles.categoryBlock}>
@@ -191,6 +184,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: theme.colors.mutedText,
     marginBottom: 28,
+  },
+  menuStatusText: {
+    fontSize: 14,
+    color: theme.colors.primary,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  emptyStateText: {
+    fontSize: 15,
+    color: theme.colors.mutedText,
+    lineHeight: 22,
+    marginBottom: 24,
   },
   categoryBlock: {
     marginBottom: 28,

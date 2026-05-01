@@ -37,6 +37,35 @@ import { theme } from "../theme";
 const DEMO_API_BASE_URL =
   process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
 
+let didPatchExpoLocationCleanup = false;
+
+function ensureExpoLocationCleanupCompatibility() {
+  if (didPatchExpoLocationCleanup) {
+    return;
+  }
+
+  didPatchExpoLocationCleanup = true;
+
+  try {
+    const { LocationEventEmitter } = require("expo-location/build/LocationEventEmitter");
+
+    if (typeof LocationEventEmitter?.removeSubscription !== "function") {
+      // Expo Location 19 can return a module-backed emitter here, which exposes
+      // subscription.remove() but not the legacy removeSubscription() helper.
+      LocationEventEmitter.removeSubscription = (subscription) => {
+        subscription?.remove?.();
+      };
+    }
+  } catch (error) {
+    console.warn(
+      "[location] Failed to install Expo Location cleanup compatibility shim:",
+      error?.message ?? error,
+    );
+  }
+}
+
+ensureExpoLocationCleanupCompatibility();
+
 async function notifyCustomerBySms(customerUid) {
   try {
     const { data: customer } = await supabase
@@ -255,9 +284,11 @@ export default function VolunteerDashboard() {
   const autoLocationRef = useRef(null);
 
   useEffect(() => {
-    const isInTransit = activeOrder?.status === ORDER_STATUS.IN_TRANSIT;
+    const shouldAutoShareLocation = ACTIVE_VOLUNTEER_STATUSES.includes(
+      activeOrder?.status,
+    );
 
-    if (!isInTransit || !activeOrder || !userId) {
+    if (!shouldAutoShareLocation || !activeOrder || !userId) {
       if (autoLocationRef.current) {
         autoLocationRef.current.remove();
         autoLocationRef.current = null;
@@ -283,7 +314,7 @@ export default function VolunteerDashboard() {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             capturedAt: new Date().toISOString(),
-            sharedForStatus: ORDER_STATUS.IN_TRANSIT,
+            sharedForStatus: activeOrder.status,
           };
           const nextNotes = updateOrderTracking(activeOrder.notes, {
             volunteerCoords: coords,
@@ -293,7 +324,7 @@ export default function VolunteerDashboard() {
             .update({ notes: nextNotes })
             .eq("order_id", activeOrder.order_id)
             .eq("volunteer_uid", userId)
-            .eq("status", ORDER_STATUS.IN_TRANSIT);
+            .eq("status", activeOrder.status);
           setLocationSyncMessage(
             `Location auto-updated at ${new Date().toLocaleTimeString()}.`,
           );
@@ -517,36 +548,6 @@ export default function VolunteerDashboard() {
     }
   };
 
-  const handleSyncActiveLocation = async () => {
-    if (!activeOrder || !userId) return;
-
-    setSubmitting(true);
-    try {
-      const nextNotes = await buildTrackedNotes(activeOrder.notes, activeOrder.status);
-
-      if (nextNotes === activeOrder.notes) {
-        return;
-      }
-
-      const { error } = await supabase
-        .from("orders")
-        .update({ notes: nextNotes })
-        .eq("order_id", activeOrder.order_id)
-        .eq("volunteer_uid", userId)
-        .eq("status", activeOrder.status);
-
-      if (error) {
-        console.error("Error refreshing volunteer ETA:", error);
-        Alert.alert("Error", "Unable to refresh the requester ETA right now.");
-        return;
-      }
-
-      fetchOrders();
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const openDeliveryDetails = () => {
     if (!activeOrder) return;
 
@@ -722,16 +723,6 @@ export default function VolunteerDashboard() {
                 style={styles.cardButton}
                 testID="volunteer-dashboard-view-delivery-details"
               />
-              {ACTIVE_VOLUNTEER_STATUSES.includes(activeOrder.status) ? (
-                <AppButton
-                  title="Share My Location with Customer"
-                  onPress={handleSyncActiveLocation}
-                  disabled={submitting}
-                  variant="secondary"
-                  style={styles.cardButton}
-                  testID="volunteer-dashboard-update-eta"
-                />
-              ) : null}
               {activeOrder.status === ORDER_STATUS.ACCEPTED ? (
                 <AppButton
                   title="Start Delivery"

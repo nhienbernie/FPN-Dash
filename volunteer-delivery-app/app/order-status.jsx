@@ -10,6 +10,7 @@ import {
   formatEtaMinutes,
   hasCoordinates,
 } from "../lib/deliveryTracking";
+import { deleteOrderById } from "../lib/orderDeletion";
 import { useOrderSubscription } from "../lib/orderRealtime";
 import { parseOrderNotes } from "../lib/orderSelectionWorkaround";
 import {
@@ -144,15 +145,7 @@ export default function OrderStatus() {
     if (!order) return;
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from("orders")
-        .delete()
-        .eq("order_id", order.order_id);
-
-      if (error) {
-        Alert.alert("Error", "Failed to cancel order.");
-        return;
-      }
+      await deleteOrderById(order.order_id);
 
       Alert.alert("Order Cancelled", "Your order has been cancelled.");
       router.replace("/order-food");
