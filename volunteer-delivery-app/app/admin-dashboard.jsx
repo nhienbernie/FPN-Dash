@@ -973,9 +973,10 @@ export default function AdminDashboard() {
       >
         <View style={styles.authCard}>
           <Text style={styles.eyebrow}>Admin Access</Text>
-          <Text style={styles.title}>Sign in to open the dashboard.</Text>
+          <Text style={styles.title}>Sign in to the pantry dashboard.</Text>
           <Text style={styles.subtitle}>
-            Use the single shared admin credential set for this demo view.
+            Sign in with pantry administrator credentials to review requests,
+            coordinate deliveries, and manage reported issues.
           </Text>
 
           <View style={styles.authHint}>

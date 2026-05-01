@@ -12,10 +12,11 @@ export default function ModeSelectScreen() {
       <View style={styles.heroCard}>
         <Text style={styles.eyebrow}>Food Pantry Network</Text>
         <Text style={styles.title}>
-          Delivery support for requesters, volunteers, and live admin demos.
+          Coordinate food assistance for households, volunteers, and pantry teams.
         </Text>
         <Text style={styles.subtitle}>
-          Pick the path you want to preview and jump straight into the workflow.
+          Choose how you want to continue to request groceries, manage deliveries,
+          or oversee pantry operations.
         </Text>
 
         <AppButton
@@ -32,7 +33,7 @@ export default function ModeSelectScreen() {
           testID="mode-select-requester"
         />
         <AppButton
-          title="Admin Login"
+          title="Pantry Dashboard"
           variant="ghost"
           onPress={() => router.push("/admin-dashboard")}
           style={styles.button}

@@ -297,7 +297,7 @@ export default function RequesterScreen() {
             <Text style={styles.stepHint}>
               {verificationRequested
                 ? "Enter the 6-digit code to finish signing in."
-                : "Enter your phone number and date of birth to receive a login code by text, or use the demo requester for instant access."}
+                : "Enter your phone number and date of birth to receive a secure sign-in code by text before placing a delivery request."}
             </Text>
 
             {FIELDS.map((field) => (

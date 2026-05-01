@@ -11,10 +11,10 @@ export default function VolunteerOptionsScreen() {
 
       <View style={styles.card}>
         <Text style={styles.eyebrow}>Volunteer Portal</Text>
-        <Text style={styles.title}>Choose the volunteer path that fits today.</Text>
+        <Text style={styles.title}>Support deliveries in the way that fits today.</Text>
         <Text style={styles.subtitle}>
-          New volunteers can create an account, and returning volunteers can jump
-          right back into the dashboard.
+          Create a volunteer account to get started, or sign in to manage active
+          deliveries and availability.
         </Text>
 
         <AppButton
