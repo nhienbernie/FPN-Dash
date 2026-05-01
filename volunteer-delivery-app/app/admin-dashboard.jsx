@@ -385,10 +385,11 @@ export default function AdminDashboard() {
   };
 
   const closeSectionEditor = () => {
-    if (busyKey === "section-save") {
+    if (busyKey === "section-save" || busyKey === "item-save") {
       return;
     }
 
+    setItemEditor(null);
     setSectionEditor(null);
   };
 
@@ -979,11 +980,6 @@ export default function AdminDashboard() {
             coordinate deliveries, and manage reported issues.
           </Text>
 
-          <View style={styles.authHint}>
-            <Text style={styles.authHintText}>Username: admin</Text>
-            <Text style={styles.authHintText}>Password: password</Text>
-          </View>
-
           <Text style={styles.inputLabel}>Username</Text>
           <TextInput
             style={styles.textInput}
@@ -1155,7 +1151,7 @@ export default function AdminDashboard() {
         visible={Boolean(sectionEditor)}
         transparent
         animationType="slide"
-        onRequestClose={closeSectionEditor}
+        onRequestClose={itemEditor ? closeItemEditor : closeSectionEditor}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -1167,17 +1163,26 @@ export default function AdminDashboard() {
                 <View style={styles.modalHeader}>
                   <View style={styles.modalTitleBlock}>
                     <Text style={styles.modalTitle}>
-                      {sectionEditor.mode === "create"
-                        ? "Create menu section"
-                        : "Manage section"}
+                      {itemEditor
+                        ? itemEditor.mode === "create"
+                          ? "Add menu item"
+                          : "Rename item"
+                        : sectionEditor.mode === "create"
+                          ? "Create menu section"
+                          : "Manage section"}
                     </Text>
                     <Text style={styles.modalSubtitle}>
-                      {sectionEditor.mode === "create"
-                        ? "Add a new section and its first requester-visible item."
-                        : `Section currently saved as ${sectionEditor.originalName}.`}
+                      {itemEditor
+                        ? itemEditor.sectionName
+                        : sectionEditor.mode === "create"
+                          ? "Add a new section and its first requester-visible item."
+                          : `Section currently saved as ${sectionEditor.originalName}.`}
                     </Text>
                   </View>
-                  <TouchableOpacity onPress={closeSectionEditor} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    onPress={itemEditor ? closeItemEditor : closeSectionEditor}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.modalClose}>Close</Text>
                   </TouchableOpacity>
                 </View>
@@ -1186,221 +1191,200 @@ export default function AdminDashboard() {
                   contentContainerStyle={styles.modalContent}
                   showsVerticalScrollIndicator={false}
                 >
-                  <Text style={styles.inputLabel}>Section name</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Diet Restrictions"
-                    placeholderTextColor={theme.colors.mutedText}
-                    value={sectionEditor.name}
-                    onChangeText={(text) =>
-                      setSectionEditor((current) =>
-                        current
-                          ? {
-                              ...current,
-                              name: text,
-                            }
-                          : current,
-                      )
-                    }
-                  />
-
-                  {sectionEditor.mode === "create" ? (
+                  {itemEditor ? (
                     <>
-                      <Text style={styles.menuHelperText}>
-                        Sections are discovered from the items table today, so a new
-                        section needs its first item right away.
-                      </Text>
-                      <Text style={styles.inputLabel}>First item label</Text>
+                      <Text style={styles.inputLabel}>Item label</Text>
                       <TextInput
                         style={styles.textInput}
-                        placeholder="Protein shake"
+                        placeholder="Sports drink"
                         placeholderTextColor={theme.colors.mutedText}
-                        value={sectionEditor.firstItemLabel}
+                        value={itemEditor.label}
                         onChangeText={(text) =>
-                          setSectionEditor((current) =>
+                          setItemEditor((current) =>
                             current
                               ? {
                                   ...current,
-                                  firstItemLabel: text,
+                                  label: text,
                                 }
                               : current,
                           )
                         }
                       />
-                    </>
-                  ) : currentSection ? (
-                    <>
-                      <View style={styles.sectionSummaryCard}>
-                        <Text style={styles.queueLabel}>Section status</Text>
-                        <Text style={styles.queueValue}>
-                          {currentSection.isVisible
-                            ? `${currentSection.activeItemCount} live item${currentSection.activeItemCount === 1 ? "" : "s"} visible to requesters.`
-                            : "All items in this section are hidden right now."}
-                        </Text>
-                        <Text style={styles.queueLabel}>Hidden items</Text>
-                        <Text style={styles.queueValue}>
-                          {currentSection.inactiveItemCount} hidden item
-                          {currentSection.inactiveItemCount === 1 ? "" : "s"}.
-                        </Text>
-                      </View>
 
-                      <View style={styles.actionRow}>
+                      <View style={styles.modalActions}>
                         <AppButton
-                          title="Add Item"
-                          variant="secondary"
-                          onPress={() => openCreateItem(currentSection.name)}
-                          style={styles.inlineAction}
+                          title={itemEditor.mode === "create" ? "Add Item" : "Save Item"}
+                          onPress={handleSaveItem}
+                          disabled={busyKey === "item-save"}
+                          style={styles.modalActionButton}
                         />
                         <AppButton
-                          title={currentSection.isVisible ? "Hide Section" : "Restore All"}
+                          title="Back to Section"
                           variant="ghost"
-                          onPress={() =>
-                            performSectionVisibilityUpdate(
-                              currentSection,
-                              !currentSection.isVisible,
-                            )
-                          }
-                          disabled={busyKey === `section-toggle-${currentSection.name}`}
-                          style={styles.inlineAction}
+                          onPress={closeItemEditor}
+                          disabled={busyKey === "item-save"}
+                          style={styles.modalActionButton}
                         />
                       </View>
-
-                      <Text style={styles.sectionItemsTitle}>Items in this section</Text>
-                      {currentSection.items.map((item) => (
-                        <View key={item.id} style={styles.itemRowCard}>
-                          <View style={styles.itemRowTop}>
-                            <View style={styles.itemRowText}>
-                              <Text style={styles.itemRowTitle}>{item.label}</Text>
-                              <Text style={styles.itemRowMeta}>
-                                {item.active
-                                  ? "Visible to requesters"
-                                  : "Hidden from requesters"}
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.badge,
-                                item.active ? styles.badgeVisible : styles.badgeMuted,
-                              ]}
-                            >
-                              <Text style={styles.badgeText}>
-                                {item.active ? "Live" : "Hidden"}
-                              </Text>
-                            </View>
-                          </View>
-                          <View style={styles.microActionRow}>
-                            <TouchableOpacity
-                              style={styles.microAction}
-                              onPress={() => openEditItem(item)}
-                              activeOpacity={0.8}
-                            >
-                              <Text style={styles.microActionText}>Rename</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.microAction}
-                              onPress={() =>
-                                handleToggleItemVisibility(item, !item.active)
-                              }
-                              activeOpacity={0.8}
-                              disabled={busyKey === `item-toggle-${item.id}`}
-                            >
-                              <Text style={styles.microActionText}>
-                                {item.active ? "Hide" : "Restore"}
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ))}
                     </>
                   ) : null}
 
-                  <View style={styles.modalActions}>
-                    <AppButton
-                      title={
-                        sectionEditor.mode === "create"
-                          ? "Create Section"
-                          : "Save Section"
-                      }
-                      onPress={handleSaveSection}
-                      disabled={busyKey === "section-save"}
-                      style={styles.modalActionButton}
-                    />
-                    <AppButton
-                      title="Close"
-                      variant="ghost"
-                      onPress={closeSectionEditor}
-                      disabled={busyKey === "section-save"}
-                      style={styles.modalActionButton}
-                    />
-                  </View>
+                  {!itemEditor ? (
+                    <>
+                      <Text style={styles.inputLabel}>Section name</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Diet Restrictions"
+                        placeholderTextColor={theme.colors.mutedText}
+                        value={sectionEditor.name}
+                        onChangeText={(text) =>
+                          setSectionEditor((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  name: text,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+
+                      {sectionEditor.mode === "create" ? (
+                        <>
+                          <Text style={styles.menuHelperText}>
+                            Sections are discovered from the items table today, so a new
+                            section needs its first item right away.
+                          </Text>
+                          <Text style={styles.inputLabel}>First item label</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            placeholder="Protein shake"
+                            placeholderTextColor={theme.colors.mutedText}
+                            value={sectionEditor.firstItemLabel}
+                            onChangeText={(text) =>
+                              setSectionEditor((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      firstItemLabel: text,
+                                    }
+                                  : current,
+                              )
+                            }
+                          />
+                        </>
+                      ) : currentSection ? (
+                        <>
+                          <View style={styles.sectionSummaryCard}>
+                            <Text style={styles.queueLabel}>Section status</Text>
+                            <Text style={styles.queueValue}>
+                              {currentSection.isVisible
+                                ? `${currentSection.activeItemCount} live item${currentSection.activeItemCount === 1 ? "" : "s"} visible to requesters.`
+                                : "All items in this section are hidden right now."}
+                            </Text>
+                            <Text style={styles.queueLabel}>Hidden items</Text>
+                            <Text style={styles.queueValue}>
+                              {currentSection.inactiveItemCount} hidden item
+                              {currentSection.inactiveItemCount === 1 ? "" : "s"}.
+                            </Text>
+                          </View>
+
+                          <View style={styles.actionRow}>
+                            <AppButton
+                              title="Add Item"
+                              variant="secondary"
+                              onPress={() => openCreateItem(currentSection.name)}
+                              style={styles.inlineAction}
+                            />
+                            <AppButton
+                              title={currentSection.isVisible ? "Hide Section" : "Restore All"}
+                              variant="ghost"
+                              onPress={() =>
+                                performSectionVisibilityUpdate(
+                                  currentSection,
+                                  !currentSection.isVisible,
+                                )
+                              }
+                              disabled={busyKey === `section-toggle-${currentSection.name}`}
+                              style={styles.inlineAction}
+                            />
+                          </View>
+
+                          <Text style={styles.sectionItemsTitle}>Items in this section</Text>
+                          {currentSection.items.map((item) => (
+                            <View key={item.id} style={styles.itemRowCard}>
+                              <View style={styles.itemRowTop}>
+                                <View style={styles.itemRowText}>
+                                  <Text style={styles.itemRowTitle}>{item.label}</Text>
+                                  <Text style={styles.itemRowMeta}>
+                                    {item.active
+                                      ? "Visible to requesters"
+                                      : "Hidden from requesters"}
+                                  </Text>
+                                </View>
+                                <View
+                                  style={[
+                                    styles.badge,
+                                    item.active ? styles.badgeVisible : styles.badgeMuted,
+                                  ]}
+                                >
+                                  <Text style={styles.badgeText}>
+                                    {item.active ? "Live" : "Hidden"}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.microActionRow}>
+                                <TouchableOpacity
+                                  style={styles.microAction}
+                                  onPress={() => openEditItem(item)}
+                                  activeOpacity={0.8}
+                                >
+                                  <Text style={styles.microActionText}>Rename</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={styles.microAction}
+                                  onPress={() =>
+                                    handleToggleItemVisibility(item, !item.active)
+                                  }
+                                  activeOpacity={0.8}
+                                  disabled={busyKey === `item-toggle-${item.id}`}
+                                >
+                                  <Text style={styles.microActionText}>
+                                    {item.active ? "Hide" : "Restore"}
+                                  </Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          ))}
+                        </>
+                      ) : null}
+
+                      <View style={styles.modalActions}>
+                        <AppButton
+                          title={
+                            sectionEditor.mode === "create"
+                              ? "Create Section"
+                              : "Save Section"
+                          }
+                          onPress={handleSaveSection}
+                          disabled={busyKey === "section-save"}
+                          style={styles.modalActionButton}
+                        />
+                        <AppButton
+                          title="Close"
+                          variant="ghost"
+                          onPress={closeSectionEditor}
+                          disabled={busyKey === "section-save"}
+                          style={styles.modalActionButton}
+                        />
+                      </View>
+                    </>
+                  ) : null}
                 </ScrollView>
               </>
             ) : null}
           </View>
         </KeyboardAvoidingView>
-      </Modal>
-
-      <Modal
-        visible={Boolean(itemEditor)}
-        transparent
-        animationType="fade"
-        onRequestClose={closeItemEditor}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCardCompact}>
-            {itemEditor ? (
-              <>
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalTitleBlock}>
-                    <Text style={styles.modalTitle}>
-                      {itemEditor.mode === "create" ? "Add menu item" : "Rename item"}
-                    </Text>
-                    <Text style={styles.modalSubtitle}>
-                      {itemEditor.sectionName}
-                    </Text>
-                  </View>
-                  <TouchableOpacity onPress={closeItemEditor} activeOpacity={0.7}>
-                    <Text style={styles.modalClose}>Close</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={styles.inputLabel}>Item label</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Sports drink"
-                  placeholderTextColor={theme.colors.mutedText}
-                  value={itemEditor.label}
-                  onChangeText={(text) =>
-                    setItemEditor((current) =>
-                      current
-                        ? {
-                            ...current,
-                            label: text,
-                          }
-                        : current,
-                    )
-                  }
-                />
-
-                <View style={styles.modalActions}>
-                  <AppButton
-                    title={itemEditor.mode === "create" ? "Add Item" : "Save Item"}
-                    onPress={handleSaveItem}
-                    disabled={busyKey === "item-save"}
-                    style={styles.modalActionButton}
-                  />
-                  <AppButton
-                    title="Close"
-                    variant="ghost"
-                    onPress={closeItemEditor}
-                    disabled={busyKey === "item-save"}
-                    style={styles.modalActionButton}
-                  />
-                </View>
-              </>
-            ) : null}
-          </View>
-        </View>
       </Modal>
 
       <Modal
@@ -1572,21 +1556,6 @@ const styles = StyleSheet.create({
       height: 12,
     },
     elevation: 4,
-  },
-  authHint: {
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-    backgroundColor: theme.colors.infoBg,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.infoBorder,
-    padding: theme.spacing.md,
-    gap: theme.spacing.xs,
-  },
-  authHintText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: theme.colors.infoText,
   },
   authPasswordLabel: {
     marginTop: theme.spacing.lg,
@@ -1850,14 +1819,6 @@ const styles = StyleSheet.create({
   modalCard: {
     width: "100%",
     maxHeight: "90%",
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radius.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.xl,
-  },
-  modalCardCompact: {
-    width: "100%",
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.xl,
     borderWidth: 1,
