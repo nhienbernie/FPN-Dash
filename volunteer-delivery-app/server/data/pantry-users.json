@@ -65,19 +65,6 @@
     }
   },
   {
-    "phone": "6144647335",
-    "dob": "04/30/2004",
-    "firstName": "Beck",
-    "lastName": "Robins",
-    "address": {
-      "line1": "2421 Plymouth Ave",
-      "line2": "",
-      "city": "Columbus",
-      "state": "OH",
-      "zip": "43209"
-    }
-  },
-  {
     "phone": "7403345543",
     "dob": "01/01/2001",
     "firstName": "Real",
