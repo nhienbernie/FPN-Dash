@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import {
@@ -33,6 +33,33 @@ import { lookupAddress } from "../services/geocode";
 import { supabase } from "../services/supabase";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { theme } from "../theme";
+
+const DEMO_API_BASE_URL =
+  process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
+
+async function notifyCustomerBySms(customerUid) {
+  try {
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("phone_number, first_name")
+      .eq("uid", customerUid)
+      .maybeSingle();
+
+    if (!customer?.phone_number) return;
+
+    const firstName = customer.first_name ?? "there";
+    await fetch(`${DEMO_API_BASE_URL}/api/notify/sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: customer.phone_number,
+        message: `Hi ${firstName}, a volunteer has accepted your food pantry order and will be delivering it to you soon!`,
+      }),
+    });
+  } catch (err) {
+    console.warn("[sms] Failed to notify customer:", err.message);
+  }
+}
 
 function buildEtaPreview(coords, deliveryCoords) {
   const distanceMiles = calculateDistanceMiles(coords, deliveryCoords);
@@ -186,7 +213,7 @@ export default function VolunteerDashboard() {
     ] = await Promise.all([
       supabase
         .from("orders")
-        .select("*")
+        .select("*, boxes(box_id, box_number, order_items(item_id, items(label)))")
         .eq("status", ORDER_STATUS.PENDING)
         .order("created_at", { ascending: true }),
       supabase
@@ -224,6 +251,66 @@ export default function VolunteerDashboard() {
       fetchOrders();
     },
   });
+
+  const autoLocationRef = useRef(null);
+
+  useEffect(() => {
+    const isInTransit = activeOrder?.status === ORDER_STATUS.IN_TRANSIT;
+
+    if (!isInTransit || !activeOrder || !userId) {
+      if (autoLocationRef.current) {
+        autoLocationRef.current.remove();
+        autoLocationRef.current = null;
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const startWatching = async () => {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== "granted" || cancelled) return;
+
+      autoLocationRef.current = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 120000,
+          distanceInterval: 200,
+        },
+        async (position) => {
+          if (cancelled) return;
+          const coords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            capturedAt: new Date().toISOString(),
+            sharedForStatus: ORDER_STATUS.IN_TRANSIT,
+          };
+          const nextNotes = updateOrderTracking(activeOrder.notes, {
+            volunteerCoords: coords,
+          });
+          await supabase
+            .from("orders")
+            .update({ notes: nextNotes })
+            .eq("order_id", activeOrder.order_id)
+            .eq("volunteer_uid", userId)
+            .eq("status", ORDER_STATUS.IN_TRANSIT);
+          setLocationSyncMessage(
+            `Location auto-updated at ${new Date().toLocaleTimeString()}.`,
+          );
+        },
+      );
+    };
+
+    startWatching();
+
+    return () => {
+      cancelled = true;
+      if (autoLocationRef.current) {
+        autoLocationRef.current.remove();
+        autoLocationRef.current = null;
+      }
+    };
+  }, [activeOrder?.order_id, activeOrder?.status, userId]);
 
   useEffect(() => {
     if (!hasVolunteerProfile || availableOrders.length === 0) {
@@ -373,6 +460,7 @@ export default function VolunteerDashboard() {
         return;
       }
 
+      notifyCustomerBySms(selectedOrder.customer_uid);
       setSelectedOrder(null);
       fetchOrders();
     } finally {
@@ -472,10 +560,37 @@ export default function VolunteerDashboard() {
     });
   };
 
+  const renderBoxSummary = (order) => {
+    const boxes = [...(order.boxes ?? [])].sort((a, b) => a.box_number - b.box_number);
+    const parsedNotes = parseOrderNotes(order.notes);
+
+    if (boxes.length > 0) {
+      return boxes.map((box) => {
+        const items = (box.order_items ?? []).map((e) => e.items?.label).filter(Boolean);
+        return (
+          <Text key={box.box_id} style={styles.orderMeta}>
+            {boxes.length > 1 ? `Box ${box.box_number}: ` : "Items: "}
+            {items.length > 0 ? items.join(", ") : "No items selected"}
+          </Text>
+        );
+      });
+    }
+
+    if (parsedNotes.selectedItems.length > 0) {
+      return (
+        <Text style={styles.orderMeta}>
+          Items: {parsedNotes.selectedItems.join(", ")}
+        </Text>
+      );
+    }
+
+    return null;
+  };
+
   const renderAvailableOrder = (order) => {
     const statusMeta = getOrderStatusMeta(order.status);
-    const parsedNotes = parseOrderNotes(order.notes);
     const etaPreview = availableOrderEta[order.order_id];
+    const boxCount = order.box_count ?? (order.boxes?.length ?? null);
 
     return (
       <View
@@ -494,12 +609,12 @@ export default function VolunteerDashboard() {
           Requested:{" "}
           {order.created_at ? new Date(order.created_at).toLocaleString() : ""}
         </Text>
-        <Text style={styles.orderMeta}>Status: {statusMeta.label}</Text>
-        {parsedNotes.selectedItems.length > 0 ? (
+        {boxCount ? (
           <Text style={styles.orderMeta}>
-            Items: {parsedNotes.selectedItems.join(", ")}
+            {boxCount === 1 ? "1 box" : `${boxCount} boxes`}
           </Text>
         ) : null}
+        {renderBoxSummary(order)}
         {etaPreview?.state === "ready" ? (
           <Text style={styles.orderMeta}>
             ETA: {etaPreview.etaLabel} ({etaPreview.distanceLabel} away)
@@ -596,7 +711,7 @@ export default function VolunteerDashboard() {
                   {new Date(activeTracking.capturedAt).toLocaleTimeString()}
                 </Text>
               ) : null}
-              <Text style={styles.orderHint}>{activeStatusMeta.description}</Text>
+              <Text style={styles.orderHint}>{activeStatusMeta.volunteerDescription ?? activeStatusMeta.description}</Text>
               {locationSyncMessage ? (
                 <Text style={styles.orderHint}>{locationSyncMessage}</Text>
               ) : null}
@@ -609,7 +724,7 @@ export default function VolunteerDashboard() {
               />
               {ACTIVE_VOLUNTEER_STATUSES.includes(activeOrder.status) ? (
                 <AppButton
-                  title="Update ETA"
+                  title="Share My Location with Customer"
                   onPress={handleSyncActiveLocation}
                   disabled={submitting}
                   variant="secondary"
@@ -688,28 +803,53 @@ export default function VolunteerDashboard() {
             {selectedOrder ? (
               (() => {
                 const parsedNotes = parseOrderNotes(selectedOrder.notes);
+                const boxes = [...(selectedOrder.boxes ?? [])].sort(
+                  (a, b) => a.box_number - b.box_number,
+                );
+                const boxCount = selectedOrder.box_count ?? (boxes.length || null);
                 return (
                   <>
-                <Text style={styles.modalText}>Name: {selectedOrder.name}</Text>
-                <Text style={styles.modalText}>
-                  Requested:{" "}
-                  {selectedOrder.created_at
-                    ? new Date(selectedOrder.created_at).toLocaleString()
-                    : ""}
-                </Text>
-                <Text style={styles.modalText}>
-                  Address: {selectedOrder.delivery_address}
-                </Text>
-                {parsedNotes.selectedItems.length > 0 ? (
-                  <Text style={styles.modalText}>
-                    Items: {parsedNotes.selectedItems.join(", ")}
-                  </Text>
-                ) : null}
-                {parsedNotes.userNotes ? (
-                  <Text style={styles.modalText}>
-                    Notes: {parsedNotes.userNotes}
-                  </Text>
-                ) : null}
+                    <Text style={styles.modalText}>
+                      Name: {selectedOrder.name}
+                    </Text>
+                    <Text style={styles.modalText}>
+                      Requested:{" "}
+                      {selectedOrder.created_at
+                        ? new Date(selectedOrder.created_at).toLocaleString()
+                        : ""}
+                    </Text>
+                    <Text style={styles.modalText}>
+                      Address: {selectedOrder.delivery_address}
+                    </Text>
+                    {boxCount ? (
+                      <Text style={styles.modalText}>
+                        Boxes: {boxCount === 1 ? "1 box" : `${boxCount} boxes`}
+                      </Text>
+                    ) : null}
+                    {boxes.length > 0
+                      ? boxes.map((box) => {
+                          const items = (box.order_items ?? [])
+                            .map((e) => e.items?.label)
+                            .filter(Boolean);
+                          return (
+                            <Text key={box.box_id} style={styles.modalText}>
+                              {boxes.length > 1 ? `Box ${box.box_number}: ` : "Items: "}
+                              {items.length > 0 ? items.join(", ") : "No items selected"}
+                            </Text>
+                          );
+                        })
+                      : parsedNotes.selectedItems.length > 0
+                      ? (
+                          <Text style={styles.modalText}>
+                            Items: {parsedNotes.selectedItems.join(", ")}
+                          </Text>
+                        )
+                      : null}
+                    {parsedNotes.userNotes ? (
+                      <Text style={styles.modalText}>
+                        Notes: {parsedNotes.userNotes}
+                      </Text>
+                    ) : null}
                   </>
                 );
               })()

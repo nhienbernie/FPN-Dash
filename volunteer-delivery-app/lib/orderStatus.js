@@ -35,6 +35,7 @@ export const ORDER_STATUS_META = {
   [ORDER_STATUS.PENDING]: {
     label: "Pending",
     description: "We received your order.",
+    volunteerDescription: "Waiting for you to start the delivery.",
     stepIndex: 0,
     accentColor: theme.colors.primary,
     backgroundColor: "#FFFAEB",
@@ -43,6 +44,7 @@ export const ORDER_STATUS_META = {
   [ORDER_STATUS.ACCEPTED]: {
     label: "Accepted",
     description: "A volunteer accepted your order.",
+    volunteerDescription: "You accepted this order. Head to the pantry to pick it up.",
     stepIndex: 1,
     accentColor: theme.colors.primary,
     backgroundColor: "#EFF8FF",
@@ -51,6 +53,7 @@ export const ORDER_STATUS_META = {
   [ORDER_STATUS.IN_TRANSIT]: {
     label: "In Transit",
     description: "Your delivery is on the way.",
+    volunteerDescription: "Delivery in progress — head to the customer's address.",
     stepIndex: 2,
     accentColor: theme.colors.primary,
     backgroundColor: "#F4F3FF",
@@ -59,6 +62,7 @@ export const ORDER_STATUS_META = {
   [ORDER_STATUS.DELIVERED]: {
     label: "Delivered",
     description: "Your order was delivered.",
+    volunteerDescription: "You marked this order as delivered.",
     stepIndex: 3,
     accentColor: theme.colors.primary,
     backgroundColor: theme.colors.successBg,
