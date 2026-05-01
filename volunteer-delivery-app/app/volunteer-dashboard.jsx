@@ -7,8 +7,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
+import VolunteerMapView from "../components/VolunteerMapView";
 import AppButton from "../components/AppButton";
 import {
   calculateDistanceMiles,
@@ -31,11 +33,9 @@ import {
 } from "../lib/orderStatus";
 import { lookupAddress } from "../services/geocode";
 import { supabase } from "../services/supabase";
+import { DEMO_API_BASE_URL } from "../lib/apiConfig";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { theme } from "../theme";
-
-const DEMO_API_BASE_URL =
-  process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
 
 let didPatchExpoLocationCleanup = false;
 
@@ -116,8 +116,11 @@ export default function VolunteerDashboard() {
   const [locationSyncMessage, setLocationSyncMessage] = useState("");
   const [dashboardCoords, setDashboardCoords] = useState(null);
   const [availableOrderEta, setAvailableOrderEta] = useState({});
+  const [orderCoords, setOrderCoords] = useState({});
+  const [activeOrderCoords, setActiveOrderCoords] = useState(null);
   const [previewEtaState, setPreviewEtaState] = useState("idle");
   const [previewEtaMessage, setPreviewEtaMessage] = useState("");
+  const [viewMode, setViewMode] = useState("list");
   const router = useRouter();
 
   const loadDashboardLocation = useCallback(async ({ silent = false } = {}) => {
@@ -382,29 +385,24 @@ export default function VolunteerDashboard() {
 
       setPreviewEtaState("loading");
 
-      const entries = await Promise.all(
+      const results = await Promise.all(
         availableOrders.map(async (order) => {
           const deliveryCoords = await lookupAddress(order.delivery_address);
 
           if (!hasCoordinates(deliveryCoords)) {
-            return [
-              order.order_id,
-              { state: "address_unavailable" },
-            ];
+            return {
+              id: order.order_id,
+              eta: { state: "address_unavailable" },
+              coords: null,
+            };
           }
 
           const preview = buildEtaPreview(dashboardCoords, deliveryCoords);
-          if (!preview) {
-            return [order.order_id, { state: "address_unavailable" }];
-          }
-
-          return [
-            order.order_id,
-            {
-              state: "ready",
-              ...preview,
-            },
-          ];
+          return {
+            id: order.order_id,
+            eta: preview ? { state: "ready", ...preview } : { state: "address_unavailable" },
+            coords: deliveryCoords,
+          };
         }),
       );
 
@@ -412,7 +410,12 @@ export default function VolunteerDashboard() {
         return;
       }
 
-      setAvailableOrderEta(Object.fromEntries(entries));
+      setAvailableOrderEta(Object.fromEntries(results.map((r) => [r.id, r.eta])));
+      setOrderCoords(
+        Object.fromEntries(
+          results.filter((r) => r.coords).map((r) => [r.id, r.coords]),
+        ),
+      );
       setPreviewEtaState("ready");
       setPreviewEtaMessage("Previewing route distance from your current location.");
     };
@@ -427,6 +430,20 @@ export default function VolunteerDashboard() {
     dashboardCoords,
     hasVolunteerProfile,
   ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!activeOrder?.delivery_address) {
+      setActiveOrderCoords(null);
+      return;
+    }
+    lookupAddress(activeOrder.delivery_address).then((coords) => {
+      if (!cancelled) {
+        setActiveOrderCoords(hasCoordinates(coords) ? coords : null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [activeOrder?.delivery_address]);
 
   const acceptDisabled = useMemo(
     () => Boolean(activeOrder) || submitting,
@@ -668,9 +685,43 @@ export default function VolunteerDashboard() {
           {hasVolunteerProfile && profileMessage ? (
             <Text style={styles.heroNote}>{profileMessage}</Text>
           ) : null}
+          <View style={styles.viewToggleRow}>
+            <TouchableOpacity
+              style={[styles.viewToggleBtn, viewMode === "list" ? styles.viewToggleBtnActive : null]}
+              onPress={() => setViewMode("list")}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.viewToggleText, viewMode === "list" ? styles.viewToggleTextActive : null]}>
+                List
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.viewToggleBtn, viewMode === "map" ? styles.viewToggleBtnActive : null]}
+              onPress={() => setViewMode("map")}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.viewToggleText, viewMode === "map" ? styles.viewToggleTextActive : null]}>
+                Map
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={styles.section}>
+        {viewMode === "map" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Order Map</Text>
+            <VolunteerMapView
+              volunteerCoords={dashboardCoords}
+              availableOrders={availableOrders}
+              orderCoords={orderCoords}
+              activeOrder={activeOrder}
+              activeOrderCoords={activeOrderCoords}
+              onOrderPress={(order) => setSelectedOrder(order)}
+            />
+          </View>
+        ) : null}
+
+        <View style={[styles.section, viewMode === "map" ? styles.sectionCompact : null]}>
           <Text style={styles.sectionTitle}>My Active Delivery</Text>
           {loading ? (
             <Text style={styles.emptyText}>Loading your delivery status...</Text>
@@ -989,6 +1040,35 @@ const styles = StyleSheet.create({
   refreshButton: {
     width: "100%",
     marginBottom: theme.spacing.md,
+  },
+  viewToggleRow: {
+    flexDirection: "row",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  viewToggleBtn: {
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: "center",
+  },
+  viewToggleBtnActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  viewToggleText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
+  },
+  viewToggleTextActive: {
+    color: theme.colors.primaryText,
+  },
+  sectionCompact: {
+    paddingVertical: theme.spacing.md,
   },
   modalOverlay: {
     flex: 1,

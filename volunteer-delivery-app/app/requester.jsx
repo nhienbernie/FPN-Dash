@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import AppButton from "../components/AppButton";
+import { DEMO_API_BASE_URL } from "../lib/apiConfig";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { theme } from "../theme";
 import {
@@ -24,8 +25,7 @@ import {
 } from "../validators/requesterValidators";
 import { digitsOnly } from "../validators/volunteerValidators";
 
-const AUTH_API_BASE_URL =
-  process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
+const AUTH_API_BASE_URL = DEMO_API_BASE_URL;
 const DEMO_VERIFICATION_DEFAULT_CODE = "123456";
 
 const FIELDS = [

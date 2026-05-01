@@ -8,6 +8,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -19,8 +20,12 @@ import AppButton from "../components/AppButton";
 import {
   ADMIN_TABS,
   buildAdminMetrics,
+  buildCsvContent,
   buildMenuSections,
+  buildOrdersByStatus,
+  buildOrdersPerDay,
   buildQueueHeadline,
+  buildVolunteerStats,
   formatElapsedSince,
   formatQueueAge,
   generateMenuItemKey,
@@ -55,6 +60,16 @@ const TAB_COPY = {
     title: "Complaint handling",
     subtitle:
       "Triage safety and service complaints with a clearer review flow.",
+  },
+  analytics: {
+    title: "Analytics",
+    subtitle:
+      "Order volume, status breakdown, daily trends, and volunteer reliability scores.",
+  },
+  history: {
+    title: "Order history",
+    subtitle:
+      "Browse all past orders with optional date filtering and CSV export.",
   },
 };
 
@@ -92,6 +107,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyKey, setBusyKey] = useState("");
+  const [historyFilter, setHistoryFilter] = useState({ from: "", to: "" });
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const [activeTab, setActiveTab] = useState("menu");
   const [focusedComplaint, setFocusedComplaint] = useState(null);
@@ -332,6 +348,36 @@ export default function AdminDashboard() {
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     [dashboardData.orders],
   );
+
+  const volunteerStats = useMemo(
+    () => buildVolunteerStats(dashboardData.orders, dashboardData.volunteersById),
+    [dashboardData.orders, dashboardData.volunteersById],
+  );
+
+  const ordersByStatus = useMemo(
+    () => buildOrdersByStatus(dashboardData.orders),
+    [dashboardData.orders],
+  );
+
+  const ordersPerDay = useMemo(
+    () => buildOrdersPerDay(dashboardData.orders, 7),
+    [dashboardData.orders],
+  );
+
+  const filteredHistoryOrders = useMemo(() => {
+    const fromDate = historyFilter.from ? new Date(historyFilter.from) : null;
+    const toDate = historyFilter.to ? new Date(historyFilter.to) : null;
+    if (toDate) toDate.setHours(23, 59, 59, 999);
+
+    return [...dashboardData.orders]
+      .filter((order) => {
+        const t = new Date(order.created_at);
+        if (fromDate && t < fromDate) return false;
+        if (toDate && t > toDate) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [dashboardData.orders, historyFilter]);
 
   const complaintQueue = useMemo(() => {
     const severityRank = {
@@ -894,6 +940,184 @@ export default function AdminDashboard() {
     );
   };
 
+  const handleExportCsv = async () => {
+    const csv = buildCsvContent(
+      filteredHistoryOrders,
+      dashboardData.customersById,
+      dashboardData.volunteersById,
+    );
+
+    if (Platform.OS === "web") {
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `fpn-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } else {
+      try {
+        await Share.share({ message: csv, title: "FPN Order Export" });
+      } catch (error) {
+        console.error("CSV share failed:", error);
+      }
+    }
+  };
+
+  const renderAnalyticsTab = () => {
+    if (loading) {
+      return <Text style={styles.emptyText}>Loading analytics...</Text>;
+    }
+
+    const totalOrders = dashboardData.orders.length;
+    const maxPerDay = Math.max(...ordersPerDay.map((d) => d.count), 1);
+
+    return (
+      <>
+        <Text style={styles.analyticsSectionTitle}>Order Status Breakdown</Text>
+        {Object.entries(ordersByStatus).map(([status, count]) => {
+          const pct = totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0;
+          return (
+            <View key={status} style={styles.statRow}>
+              <Text style={styles.statLabel}>{status.replace(/_/g, " ")}</Text>
+              <View style={styles.statBarTrack}>
+                <View style={[styles.statBarFill, { width: `${pct}%` }]} />
+              </View>
+              <Text style={styles.statValue}>{count}</Text>
+            </View>
+          );
+        })}
+
+        <Text style={[styles.analyticsSectionTitle, styles.analyticsSectionSpacing]}>
+          Orders per Day (last 7 days)
+        </Text>
+        {ordersPerDay.map((day) => {
+          const barPct = maxPerDay > 0 ? Math.round((day.count / maxPerDay) * 100) : 0;
+          return (
+            <View key={day.label} style={styles.statRow}>
+              <Text style={styles.statLabel}>{day.label}</Text>
+              <View style={styles.statBarTrack}>
+                <View
+                  style={[
+                    styles.statBarFill,
+                    { width: `${barPct}%`, backgroundColor: "#0F766E" },
+                  ]}
+                />
+              </View>
+              <Text style={styles.statValue}>{day.count}</Text>
+            </View>
+          );
+        })}
+
+        <Text style={[styles.analyticsSectionTitle, styles.analyticsSectionSpacing]}>
+          Volunteer Reliability
+        </Text>
+        {volunteerStats.length === 0 ? (
+          <Text style={styles.emptyText}>No volunteer delivery data yet.</Text>
+        ) : (
+          volunteerStats.map((v) => (
+            <View key={v.uid} style={styles.volunteerRow}>
+              <View style={styles.volunteerInfo}>
+                <Text style={styles.volunteerName}>{v.name}</Text>
+                <Text style={styles.volunteerMeta}>
+                  {v.inProgress > 0 ? `${v.inProgress} in progress · ` : ""}
+                  {v.completed} delivered
+                </Text>
+              </View>
+              <View style={styles.reliabilityBadge}>
+                <Text style={styles.reliabilityText}>{v.completionRate}%</Text>
+              </View>
+            </View>
+          ))
+        )}
+      </>
+    );
+  };
+
+  const renderHistoryTab = () => {
+    if (loading) {
+      return <Text style={styles.emptyText}>Loading order history...</Text>;
+    }
+
+    return (
+      <>
+        <View style={styles.historyFilterRow}>
+          <View style={styles.historyFilterField}>
+            <Text style={styles.inputLabel}>From</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={styles.mutedPlaceholder.color}
+              value={historyFilter.from}
+              onChangeText={(v) => setHistoryFilter((f) => ({ ...f, from: v }))}
+            />
+          </View>
+          <View style={styles.historyFilterField}>
+            <Text style={styles.inputLabel}>To</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={styles.mutedPlaceholder.color}
+              value={historyFilter.to}
+              onChangeText={(v) => setHistoryFilter((f) => ({ ...f, to: v }))}
+            />
+          </View>
+        </View>
+
+        <AppButton
+          title={`Export ${filteredHistoryOrders.length} orders as CSV`}
+          variant="secondary"
+          onPress={() => void handleExportCsv()}
+          style={styles.menuToolbarButton}
+        />
+
+        {filteredHistoryOrders.length === 0 ? (
+          <Text style={[styles.emptyText, { marginTop: 12 }]}>No orders match this date range.</Text>
+        ) : (
+          filteredHistoryOrders.map((order) => {
+            const statusMeta = getOrderStatusBadge(order);
+            const customerLabel = getCustomerLabel(order, dashboardData.customersById);
+            const volunteerLabel = order.volunteer_uid
+              ? dashboardData.volunteersById[order.volunteer_uid]
+              : null;
+
+            return (
+              <View key={order.order_id} style={styles.queueCard}>
+                <View style={styles.queueCardHeader}>
+                  <View style={styles.queueCardTitleBlock}>
+                    <Text style={styles.queueCardTitle}>{customerLabel}</Text>
+                    <Text style={styles.queueCardMeta}>
+                      {formatTimestamp(order.created_at)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        backgroundColor: statusMeta.backgroundColor,
+                        borderColor: statusMeta.borderColor,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.badgeText}>{statusMeta.label}</Text>
+                  </View>
+                </View>
+                <Text style={styles.queueLabel}>Address</Text>
+                <Text style={styles.queueValue}>{buildAddressSummary(order.delivery_address)}</Text>
+                {volunteerLabel ? (
+                  <>
+                    <Text style={styles.queueLabel}>Volunteer</Text>
+                    <Text style={styles.queueValue}>{volunteerLabel}</Text>
+                  </>
+                ) : null}
+              </View>
+            );
+          })
+        )}
+      </>
+    );
+  };
+
   const renderActiveQueue = () => {
     if (activeTab === "menu") {
       if (loading) {
@@ -940,6 +1164,14 @@ export default function AdminDashboard() {
       }
 
       return cancellationQueue.map(renderCancellationCard);
+    }
+
+    if (activeTab === "analytics") {
+      return renderAnalyticsTab();
+    }
+
+    if (activeTab === "history") {
+      return renderHistoryTab();
     }
 
     if (loading) {
@@ -1934,5 +2166,95 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
+  },
+  analyticsSectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+  },
+  analyticsSectionSpacing: {
+    marginTop: theme.spacing.xl,
+  },
+  statRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  statLabel: {
+    width: 90,
+    fontSize: 13,
+    color: theme.colors.mutedText,
+    textTransform: "capitalize",
+  },
+  statBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.surfaceMuted,
+    overflow: "hidden",
+  },
+  statBarFill: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: theme.colors.secondary,
+  },
+  statValue: {
+    width: 30,
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
+    textAlign: "right",
+  },
+  volunteerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  volunteerInfo: {
+    flex: 1,
+  },
+  volunteerName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.text,
+    marginBottom: 2,
+  },
+  volunteerMeta: {
+    fontSize: 13,
+    color: theme.colors.mutedText,
+  },
+  reliabilityBadge: {
+    backgroundColor: theme.colors.successBg,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.successBorder,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 50,
+    alignItems: "center",
+  },
+  reliabilityText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.successText,
+  },
+  historyFilterRow: {
+    flexDirection: "row",
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  historyFilterField: {
+    flex: 1,
+  },
+  mutedPlaceholder: {
+    color: theme.colors.mutedText,
   },
 });

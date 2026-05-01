@@ -30,40 +30,67 @@ function OrderProgress({ status }) {
   const currentStep = getOrderStatusMeta(normalizedStatus).stepIndex;
 
   return (
-    <View style={styles.progressContainer}>
-      {ORDER_PROGRESS_STAGES.map((stage, index) => {
-        const meta = getOrderStatusMeta(stage);
-        const isComplete = index <= currentStep;
-        const isCurrent = index === currentStep;
+    <View style={styles.progressWrapper}>
+      <View style={styles.progressContainer}>
+        {ORDER_PROGRESS_STAGES.map((stage, index) => {
+          const meta = getOrderStatusMeta(stage);
+          const isDone = index < currentStep;
+          const isCurrent = index === currentStep;
+          const isUpcoming = index > currentStep;
 
-        return (
-          <View key={stage} style={styles.progressStep}>
-            <View
-              style={[
-                styles.progressDot,
-                {
-                  backgroundColor: isComplete ? meta.accentColor : theme.colors.background,
-                  borderColor: meta.borderColor,
-                },
-                isCurrent ? styles.progressDotCurrent : null,
-              ]}
-            />
-            {index < ORDER_PROGRESS_STAGES.length - 1 ? (
+          const dotBg = isDone
+            ? theme.colors.primary
+            : isCurrent
+            ? theme.colors.primary
+            : theme.colors.background;
+          const dotBorder = isUpcoming ? theme.colors.border : theme.colors.primary;
+
+          return (
+            <View key={stage} style={styles.progressStep}>
+              {index < ORDER_PROGRESS_STAGES.length - 1 ? (
+                <View
+                  style={[
+                    styles.progressLine,
+                    {
+                      backgroundColor: isDone
+                        ? theme.colors.primary
+                        : theme.colors.border,
+                    },
+                  ]}
+                />
+              ) : null}
               <View
                 style={[
-                  styles.progressLine,
-                  {
-                    backgroundColor: isComplete
-                      ? meta.accentColor
-                      : theme.colors.border,
-                  },
+                  styles.progressDot,
+                  { backgroundColor: dotBg, borderColor: dotBorder },
+                  isCurrent ? styles.progressDotCurrent : null,
                 ]}
-              />
-            ) : null}
-            <Text style={styles.progressLabel}>{meta.label}</Text>
-          </View>
-        );
-      })}
+              >
+                {isDone ? (
+                  <Text style={styles.progressDotCheck}>✓</Text>
+                ) : (
+                  <Text
+                    style={[
+                      styles.progressDotNumber,
+                      { color: isCurrent ? theme.colors.primaryText : theme.colors.mutedText },
+                    ]}
+                  >
+                    {index + 1}
+                  </Text>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.progressLabel,
+                  isCurrent ? styles.progressLabelActive : null,
+                ]}
+              >
+                {meta.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -479,6 +506,9 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     textAlign: "center",
   },
+  progressWrapper: {
+    marginVertical: theme.spacing.md,
+  },
   progressContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -487,30 +517,56 @@ const styles = StyleSheet.create({
   progressStep: {
     flex: 1,
     alignItems: "center",
+    position: "relative",
   },
   progressDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     borderWidth: 2,
     marginBottom: theme.spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
   },
   progressDotCurrent: {
-    transform: [{ scale: 1.12 }],
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    shadowColor: theme.colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  progressDotCheck: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: theme.colors.primaryText,
+  },
+  progressDotNumber: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   progressLine: {
     position: "absolute",
-    top: 8,
+    top: 13,
     left: "50%",
     right: "-50%",
-    height: 2,
-    zIndex: -1,
+    height: 3,
+    borderRadius: 2,
+    zIndex: 0,
   },
   progressLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: theme.colors.mutedText,
     textAlign: "center",
     paddingHorizontal: 2,
+  },
+  progressLabelActive: {
+    color: theme.colors.primary,
+    fontWeight: "700",
+    fontSize: 12,
   },
   lockedState: {
     backgroundColor: "#F8FAFC",

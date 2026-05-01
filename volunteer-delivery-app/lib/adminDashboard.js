@@ -6,6 +6,8 @@ export const ADMIN_TABS = [
   { key: "menu", label: "Menu Setup" },
   { key: "cancellations", label: "Cancellations" },
   { key: "complaints", label: "Complaints" },
+  { key: "analytics", label: "Analytics" },
+  { key: "history", label: "History" },
 ];
 
 export const CANCELLABLE_ORDER_STATUSES = [
@@ -345,4 +347,114 @@ export function buildQueueHeadline(metrics) {
 
 export function getOrderStatusBadge(order) {
   return getOrderStatusMeta(order?.status);
+}
+
+export function buildVolunteerStats(orders, volunteersById) {
+  const statsById = {};
+
+  for (const order of orders) {
+    if (!order.volunteer_uid) continue;
+
+    if (!statsById[order.volunteer_uid]) {
+      statsById[order.volunteer_uid] = { completed: 0, inProgress: 0 };
+    }
+
+    if (order.status === ORDER_STATUS.DELIVERED) {
+      statsById[order.volunteer_uid].completed += 1;
+    } else if (
+      order.status === ORDER_STATUS.ACCEPTED ||
+      order.status === ORDER_STATUS.IN_TRANSIT
+    ) {
+      statsById[order.volunteer_uid].inProgress += 1;
+    }
+  }
+
+  return Object.entries(statsById)
+    .map(([uid, stats]) => {
+      const total = stats.completed + stats.inProgress;
+      return {
+        uid,
+        name: normalizeText(volunteersById[uid]) || "Unknown",
+        completed: stats.completed,
+        inProgress: stats.inProgress,
+        total,
+        completionRate: total > 0 ? Math.round((stats.completed / total) * 100) : 0,
+      };
+    })
+    .sort((a, b) => b.completed - a.completed);
+}
+
+export function buildOrdersByStatus(orders) {
+  const counts = {
+    [ORDER_STATUS.PENDING]: 0,
+    [ORDER_STATUS.ACCEPTED]: 0,
+    [ORDER_STATUS.IN_TRANSIT]: 0,
+    [ORDER_STATUS.DELIVERED]: 0,
+  };
+
+  for (const order of orders) {
+    if (counts[order.status] !== undefined) {
+      counts[order.status] += 1;
+    }
+  }
+
+  return counts;
+}
+
+export function buildOrdersPerDay(orders, days = 7) {
+  const result = [];
+  const now = new Date();
+
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const dayStart = new Date(date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const count = orders.filter((o) => {
+      const t = new Date(o.created_at);
+      return t >= dayStart && t <= dayEnd;
+    }).length;
+
+    result.push({ label: dateStr, count });
+  }
+
+  return result;
+}
+
+export function buildCsvContent(orders, customersById, volunteersById) {
+  const escape = (val) => `"${String(val ?? "").replace(/"/g, '""')}"`;
+
+  const header = [
+    "Order ID",
+    "Customer",
+    "Status",
+    "Created At",
+    "Delivery Address",
+    "Volunteer",
+    "Boxes",
+  ].map(escape);
+
+  const rows = orders.map((order) => {
+    const customerName = getCustomerLabel(order, customersById);
+    const volunteerName = order.volunteer_uid
+      ? normalizeText(volunteersById[order.volunteer_uid])
+      : "";
+    const boxes = order.box_count || (order.boxes?.length ?? 1);
+
+    return [
+      order.order_id,
+      customerName,
+      order.status,
+      order.created_at,
+      order.delivery_address || "",
+      volunteerName,
+      boxes,
+    ].map(escape);
+  });
+
+  return [header, ...rows].map((row) => row.join(",")).join("\n");
 }

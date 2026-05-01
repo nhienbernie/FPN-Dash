@@ -40,18 +40,28 @@ function sanitizeTracking(tracking) {
   return { volunteerCoords };
 }
 
+function sanitizeDeliveryProof(proof) {
+  if (!proof || typeof proof !== "object") return null;
+  const photoUri = normalizeText(proof.photoUri);
+  const capturedAt = normalizeText(proof.capturedAt);
+  if (!photoUri) return null;
+  return { photoUri, ...(capturedAt ? { capturedAt } : {}) };
+}
+
 export function buildOrderNotes({
   selectedItems = [],
   userNotes = "",
   tracking = null,
+  deliveryProof = null,
 }) {
   const cleanedItems = selectedItems
     .map((item) => normalizeText(item))
     .filter(Boolean);
   const cleanedNotes = normalizeText(userNotes);
   const cleanedTracking = sanitizeTracking(tracking);
+  const cleanedProof = sanitizeDeliveryProof(deliveryProof);
 
-  if (cleanedItems.length === 0 && !cleanedTracking) {
+  if (cleanedItems.length === 0 && !cleanedTracking && !cleanedProof) {
     return cleanedNotes || null;
   }
 
@@ -62,6 +72,10 @@ export function buildOrderNotes({
 
   if (cleanedTracking) {
     payload.tracking = cleanedTracking;
+  }
+
+  if (cleanedProof) {
+    payload.deliveryProof = cleanedProof;
   }
 
   return `${WORKAROUND_PREFIX}${JSON.stringify(payload)}`;
@@ -75,6 +89,7 @@ export function parseOrderNotes(notes) {
       selectedItems: [],
       userNotes: "",
       tracking: null,
+      deliveryProof: null,
       isWorkaround: false,
     };
   }
@@ -84,6 +99,7 @@ export function parseOrderNotes(notes) {
       selectedItems: [],
       userNotes: rawNotes,
       tracking: null,
+      deliveryProof: null,
       isWorkaround: false,
     };
   }
@@ -100,6 +116,7 @@ export function parseOrderNotes(notes) {
       selectedItems,
       userNotes: normalizeText(payload.userNotes),
       tracking: sanitizeTracking(payload.tracking),
+      deliveryProof: sanitizeDeliveryProof(payload.deliveryProof ?? null),
       isWorkaround: true,
     };
   } catch (_error) {
@@ -110,6 +127,18 @@ export function parseOrderNotes(notes) {
       isWorkaround: false,
     };
   }
+}
+
+export function attachDeliveryProof(notes, photoUri) {
+  const existing = parseOrderNotes(notes);
+  return buildOrderNotes({
+    selectedItems: existing.selectedItems,
+    userNotes: existing.userNotes,
+    tracking: existing.tracking,
+    deliveryProof: photoUri
+      ? { photoUri, capturedAt: new Date().toISOString() }
+      : null,
+  });
 }
 
 export function updateOrderTracking(notes, trackingUpdates) {

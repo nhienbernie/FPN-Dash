@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import AppButton from "../components/AppButton";
 import ReportConcernModal from "../components/ReportConcernModal";
 import {
+  attachDeliveryProof,
   parseOrderNotes,
   updateOrderTracking,
 } from "../lib/orderSelectionWorkaround";
@@ -17,6 +19,8 @@ export default function ConfirmDelivery() {
   const [modalVisible, setModalVisible] = useState(false);
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [proofPhotoUri, setProofPhotoUri] = useState(null);
+  const [pickingPhoto, setPickingPhoto] = useState(false);
 
   const [orderDetails] = useState(() => {
     if (!order) return {};
@@ -47,12 +51,40 @@ export default function ConfirmDelivery() {
     );
   };
 
+  const handleTakePhoto = async () => {
+    setPickingPhoto(true);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Camera permission required",
+          "Allow camera access in settings to attach delivery proof.",
+        );
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ["images"],
+        quality: 0.7,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        setProofPhotoUri(result.assets[0].uri);
+      }
+    } catch (err) {
+      console.warn("[proof] Camera failed:", err.message);
+    } finally {
+      setPickingPhoto(false);
+    }
+  };
+
   const handleConfirmDelivery = async () => {
     if (!orderDetails.order_id) return;
 
+    const updatedNotes = attachDeliveryProof(orderDetails.notes, proofPhotoUri ?? null);
+
     const { error } = await supabase
       .from("orders")
-      .update({ status: "delivered" })
+      .update({ status: "delivered", notes: updatedNotes })
       .eq("order_id", orderDetails.order_id);
 
     if (error) {
@@ -104,6 +136,30 @@ export default function ConfirmDelivery() {
         <Text style={styles.detailText}>
           Notes: {parsedNotes.userNotes || "None"}
         </Text>
+
+        <View style={styles.proofSection}>
+          <Text style={styles.proofLabel}>Delivery proof (optional)</Text>
+          {proofPhotoUri ? (
+            <View style={styles.proofPreviewContainer}>
+              <Image source={{ uri: proofPhotoUri }} style={styles.proofPreview} />
+              <TouchableOpacity
+                style={styles.proofRetakeButton}
+                onPress={handleTakePhoto}
+                disabled={pickingPhoto}
+              >
+                <Text style={styles.proofRetakeText}>Retake</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <AppButton
+              title={pickingPhoto ? "Opening camera..." : "Take proof photo"}
+              onPress={handleTakePhoto}
+              variant="ghost"
+              disabled={pickingPhoto}
+              style={styles.proofButton}
+            />
+          )}
+        </View>
 
         <AppButton
           title="Confirm Delivery"
@@ -275,5 +331,48 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: "row",
+  },
+  proofSection: {
+    marginTop: theme.spacing.lg,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    padding: theme.spacing.md,
+  },
+  proofLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.mutedText,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: theme.spacing.sm,
+    textAlign: "center",
+  },
+  proofButton: {
+    width: "100%",
+  },
+  proofPreviewContainer: {
+    alignItems: "center",
+    gap: theme.spacing.sm,
+  },
+  proofPreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: theme.radius.md,
+    resizeMode: "cover",
+  },
+  proofRetakeButton: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  proofRetakeText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: theme.colors.text,
   },
 });

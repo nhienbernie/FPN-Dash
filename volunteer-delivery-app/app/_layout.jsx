@@ -1,7 +1,9 @@
 import { Stack } from "expo-router";
+import ErrorBoundary from "../components/ErrorBoundary";
 
 export default function RootLayout() {
   return (
+    <ErrorBoundary>
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="mode-select" options={{ headerShown: false }} />
@@ -19,5 +21,6 @@ export default function RootLayout() {
       <Stack.Screen name="volunteer-home" options={{ headerShown: false }} />
       <Stack.Screen name="confirm-delivery" options={{ headerShown: false }} />
     </Stack>
+    </ErrorBoundary>
   );
 }
