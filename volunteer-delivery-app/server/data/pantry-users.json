@@ -1,18 +1,5 @@
 [
   {
-    "phone": "5550000001",
-    "dob": "01/15/1970",
-    "firstName": "Demo",
-    "lastName": "UserOne",
-    "address": {
-      "line1": "4974 Cadogan Pl",
-      "line2": "",
-      "city": "New Albany",
-      "state": "OH",
-      "zip": "43054"
-    }
-  },
-  {
     "phone": "1234567890",
     "dob": "01/01/2001",
     "firstName": "Testy",
@@ -23,45 +10,6 @@
       "city": "Newark",
       "state": "OH",
       "zip": "43055"
-    }
-  },
-  {
-    "phone": "5550000003",
-    "dob": "03/17/1974",
-    "firstName": "Example",
-    "lastName": "Person",
-    "address": {
-      "line1": "300 Fake St",
-      "line2": "",
-      "city": "Faketown",
-      "state": "OH",
-      "zip": "43002"
-    }
-  },
-  {
-    "phone": "5550000004",
-    "dob": "04/18/1976",
-    "firstName": "Sample",
-    "lastName": "Data",
-    "address": {
-      "line1": "400 Lorem Ipsum Blvd",
-      "line2": "",
-      "city": "Demo City",
-      "state": "OH",
-      "zip": "43003"
-    }
-  },
-  {
-    "phone": "5550000005",
-    "dob": "05/19/1978",
-    "firstName": "Placeholder",
-    "lastName": "Record",
-    "address": {
-      "line1": "500 Test Dr",
-      "line2": "Suite 123",
-      "city": "Exampleton",
-      "state": "OH",
-      "zip": "43004"
     }
   },
   {
@@ -97,6 +45,84 @@
     "lastName": "SmsDemoThree",
     "address": {
       "line1": "1035 Brice St",
+      "line2": "",
+      "city": "Newark",
+      "state": "OH",
+      "zip": "43055"
+    }
+  },
+  {
+    "phone": "7405550101",
+    "dob": "06/14/1968",
+    "firstName": "Maria",
+    "lastName": "Gonzalez",
+    "address": {
+      "line1": "750 W Main St",
+      "line2": "",
+      "city": "Newark",
+      "state": "OH",
+      "zip": "43055"
+    }
+  },
+  {
+    "phone": "7405550102",
+    "dob": "11/03/1975",
+    "firstName": "James",
+    "lastName": "Washington",
+    "address": {
+      "line1": "1203 N 21st St",
+      "line2": "",
+      "city": "Newark",
+      "state": "OH",
+      "zip": "43055"
+    }
+  },
+  {
+    "phone": "7405550103",
+    "dob": "02/27/1982",
+    "firstName": "Patricia",
+    "lastName": "Williams",
+    "address": {
+      "line1": "632 Mount Vernon Rd",
+      "line2": "Apt 4",
+      "city": "Newark",
+      "state": "OH",
+      "zip": "43055"
+    }
+  },
+  {
+    "phone": "7405550104",
+    "dob": "09/19/1960",
+    "firstName": "Robert",
+    "lastName": "Johnson",
+    "address": {
+      "line1": "112 Hillcrest Dr",
+      "line2": "",
+      "city": "Newark",
+      "state": "OH",
+      "zip": "43055"
+    }
+  },
+  {
+    "phone": "7405550105",
+    "dob": "04/08/1990",
+    "firstName": "Linda",
+    "lastName": "Thompson",
+    "address": {
+      "line1": "417 Cedar St",
+      "line2": "",
+      "city": "Newark",
+      "state": "OH",
+      "zip": "43055"
+    }
+  },
+  {
+    "phone": "7405550106",
+    "dob": "07/22/1955",
+    "firstName": "Michael",
+    "lastName": "Davis",
+    "address": {
+      "line1": "819 W Church St",
       "line2": "",
       "city": "Newark",
       "state": "OH",
