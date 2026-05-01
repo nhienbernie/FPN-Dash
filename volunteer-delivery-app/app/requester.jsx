@@ -26,7 +26,6 @@ import { digitsOnly } from "../validators/volunteerValidators";
 
 const AUTH_API_BASE_URL =
   process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
-const VERIFICATION_CODE_LENGTH = 6;
 const DEMO_VERIFICATION_DEFAULT_CODE = "123456";
 
 const FIELDS = [
