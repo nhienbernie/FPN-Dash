@@ -1,14 +1,14 @@
-export const digitsOnly = (value = "") => String(value).replace(/\D/g, "");
+const digitsOnly = (value = "") => String(value).replace(/\D/g, "");
 
-export const isValidEmail = (value = "") =>
+const isValidEmail = (value = "") =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value).trim());
 
-export const isValidZip = (value = "") => /^\d{5}$/.test(String(value).trim());
+const isValidZip = (value = "") => /^\d{5}$/.test(String(value).trim());
 
-export const buildInitialValues = (fields = []) =>
+const buildInitialValues = (fields = []) =>
   Object.fromEntries(fields.map((field) => [field.key, ""]));
 
-export const validateFieldSet = ({ fields = [], values = {}, keys }) => {
+const validateFieldSet = ({ fields = [], values = {}, keys }) => {
   const nextErrors = {};
   const allowedKeys = keys ? new Set(keys) : null;
 
@@ -35,3 +35,5 @@ export const validateFieldSet = ({ fields = [], values = {}, keys }) => {
 
   return nextErrors;
 };
+
+module.exports = { digitsOnly, isValidEmail, isValidZip, buildInitialValues, validateFieldSet };

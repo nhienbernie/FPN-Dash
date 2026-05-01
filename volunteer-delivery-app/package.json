@@ -13,7 +13,10 @@
     "web:e2e": "node scripts/serve-e2e-web.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:demo": "PLAYWRIGHT_SLOW_MO=500 playwright test --headed"
+    "test:e2e:demo": "PLAYWRIGHT_SLOW_MO=500 playwright test --headed",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -54,6 +57,8 @@
     "@types/react": "~19.1.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "jest": "^30.3.0",
+    "jest-expo": "^54.0.17",
     "typescript": "~5.9.2"
   },
   "private": true

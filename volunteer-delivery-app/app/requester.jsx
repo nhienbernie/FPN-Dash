@@ -15,29 +15,19 @@ import {
 import AppButton from "../components/AppButton";
 import { styles } from "../styles/volunteerSignUpSignIn.styles";
 import { theme } from "../theme";
+import {
+  formatDobInput,
+  validateDateOfBirth,
+  validatePhoneNumber,
+  validateVerificationCode,
+  VERIFICATION_CODE_LENGTH,
+} from "../validators/requesterValidators";
 import { digitsOnly } from "../validators/volunteerValidators";
 
 const AUTH_API_BASE_URL =
   process.env.EXPO_PUBLIC_DEMO_API_URL ?? "http://localhost:4000";
 const VERIFICATION_CODE_LENGTH = 6;
 const DEMO_VERIFICATION_DEFAULT_CODE = "123456";
-
-// To automatically format input as the user types their DOB
-const DOB_DIGIT_LENGTH = 8;
-
-const formatDobInput = (value = "") => {
-  const digits = digitsOnly(value).slice(0, DOB_DIGIT_LENGTH);
-
-  if (digits.length <= 2) {
-    return digits;
-  }
-
-  if (digits.length <= 4) {
-    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  }
-
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-};
 
 const FIELDS = [
   {
@@ -46,10 +36,7 @@ const FIELDS = [
     placeholder: "Enter 10-digit phone number",
     required: true,
     keyboardType: "phone-pad",
-    validate: (value) => {
-      const digits = String(value).replace(/\D/g, "");
-      return digits.length === 10 ? null : "Phone number must be 10 digits.";
-    },
+    validate: validatePhoneNumber,
   },
   {
     key: "dob",
@@ -57,13 +44,7 @@ const FIELDS = [
     placeholder: "MM/DD/YYYY",
     required: true,
     keyboardType: "number-pad",
-    validate: (value) => {
-      const trimmed = String(value).trim();
-      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
-        return "Enter a valid date (MM/DD/YYYY).";
-      }
-      return null;
-    },
+    validate: validateDateOfBirth,
   },
 ];
 
@@ -240,8 +221,9 @@ export default function RequesterScreen() {
 
     if (!validatedValues) return;
 
-    if (trimmedCode.length !== VERIFICATION_CODE_LENGTH) {
-      setErrors({ code: "Verification code must be 6 digits." });
+    const codeError = validateVerificationCode(trimmedCode);
+    if (codeError) {
+      setErrors({ code: codeError });
       return;
     }
 
