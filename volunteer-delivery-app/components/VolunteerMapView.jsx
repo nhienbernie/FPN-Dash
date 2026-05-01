@@ -1,7 +1,10 @@
+import { forwardRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { theme } from "../theme";
 
-export default function VolunteerMapView() {
+// Web fallback — react-native-maps does not support web.
+// The ref is accepted but unused (no imperative map API on web).
+const VolunteerMapView = forwardRef(function VolunteerMapView(_props, _ref) {
   return (
     <View style={styles.container}>
       <Text style={styles.icon}>🗺</Text>
@@ -11,7 +14,9 @@ export default function VolunteerMapView() {
       </Text>
     </View>
   );
-}
+});
+
+export default VolunteerMapView;
 
 const styles = StyleSheet.create({
   container: {

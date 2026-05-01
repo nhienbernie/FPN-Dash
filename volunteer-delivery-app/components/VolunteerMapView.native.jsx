@@ -1,3 +1,4 @@
+import { forwardRef, useImperativeHandle, useRef } from "react";
 import MapView, { Marker } from "react-native-maps";
 import { StyleSheet, Text, View } from "react-native";
 import { theme } from "../theme";
@@ -10,8 +11,8 @@ function computeRegion(volunteerCoords, orderCoordsList) {
 
   if (allPoints.length === 0) {
     return {
-      latitude: 39.2904,
-      longitude: -76.6122,
+      latitude: 40.0583,
+      longitude: -82.4013,
       latitudeDelta: 0.08,
       longitudeDelta: 0.08,
     };
@@ -24,8 +25,8 @@ function computeRegion(volunteerCoords, orderCoordsList) {
   const minLon = Math.min(...lons);
   const maxLon = Math.max(...lons);
 
-  const latDelta = Math.max((maxLat - minLat) * 1.4, 0.04);
-  const lonDelta = Math.max((maxLon - minLon) * 1.4, 0.04);
+  const latDelta = Math.max((maxLat - minLat) * 1.5, 0.04);
+  const lonDelta = Math.max((maxLon - minLon) * 1.5, 0.04);
 
   return {
     latitude: (minLat + maxLat) / 2,
@@ -35,14 +36,37 @@ function computeRegion(volunteerCoords, orderCoordsList) {
   };
 }
 
-export default function VolunteerMapView({
-  volunteerCoords,
-  availableOrders,
-  orderCoords,
-  activeOrder,
-  activeOrderCoords,
-  onOrderPress,
-}) {
+const EDGE_PADDING = { top: 80, right: 60, bottom: 80, left: 60 };
+
+const VolunteerMapView = forwardRef(function VolunteerMapView(
+  {
+    volunteerCoords,
+    availableOrders,
+    orderCoords,
+    activeOrder,
+    activeOrderCoords,
+    onOrderPress,
+  },
+  ref,
+) {
+  const mapViewRef = useRef(null);
+
+  // Exposed imperative API — parent calls fitToAll(coordsArray) after new
+  // orders arrive so the viewport smoothly animates to include all markers.
+  useImperativeHandle(
+    ref,
+    () => ({
+      fitToAll(coords) {
+        if (!mapViewRef.current || !coords?.length) return;
+        mapViewRef.current.fitToCoordinates(coords, {
+          edgePadding: EDGE_PADDING,
+          animated: true,
+        });
+      },
+    }),
+    [],
+  );
+
   const coordsList = Object.values(orderCoords).filter(
     (c) => c?.latitude && c?.longitude,
   );
@@ -54,7 +78,12 @@ export default function VolunteerMapView({
 
   return (
     <View style={styles.container}>
-      <MapView style={styles.map} initialRegion={region} showsUserLocation>
+      <MapView
+        ref={mapViewRef}
+        style={styles.map}
+        initialRegion={region}
+        showsUserLocation
+      >
         {availableOrders.map((order) => {
           const coords = orderCoords[order.order_id];
           if (!coords?.latitude) return null;
@@ -78,6 +107,7 @@ export default function VolunteerMapView({
           />
         ) : null}
       </MapView>
+
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.colors.secondary }]} />
@@ -92,7 +122,9 @@ export default function VolunteerMapView({
       </View>
     </View>
   );
-}
+});
+
+export default VolunteerMapView;
 
 const styles = StyleSheet.create({
   container: {

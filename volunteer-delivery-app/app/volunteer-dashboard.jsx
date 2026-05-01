@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import {
   Alert,
+  Animated,
   Modal,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+// ── Relative-time helper (for "last updated" display) ────────────────────────
+function formatRelativeTime(date) {
+  if (!date) return null;
+  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diffSec < 5) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  return `${Math.floor(diffMin / 60)}h ago`;
+}
 import VolunteerMapView from "../components/VolunteerMapView";
 import AppButton from "../components/AppButton";
 import {
@@ -121,7 +133,49 @@ export default function VolunteerDashboard() {
   const [previewEtaState, setPreviewEtaState] = useState("idle");
   const [previewEtaMessage, setPreviewEtaMessage] = useState("");
   const [viewMode, setViewMode] = useState("list");
+
+  // Live-update extras
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
+  const [newOrderBanner, setNewOrderBanner] = useState(null); // { count } | null
+  const [, setTimeTick] = useState(0); // force re-render for relative-time label
+
+  // Geocode cache — avoids re-calling the geocoder for orders we already know
+  const geocodeCacheRef = useRef({});
+  // Tracks order_ids we have already shown; null until after the first fetch
+  const seenOrderIdsRef = useRef(null);
+  // Banner auto-dismiss timer
+  const bannerTimerRef = useRef(null);
+  // Ref forwarded to VolunteerMapView so we can call fitToAll imperatively
+  const mapRef = useRef(null);
+  // Banner entrance animation
+  const bannerAnim = useRef(new Animated.Value(0)).current;
+
   const router = useRouter();
+
+  // Tick every 15 s so "Updated X ago" stays current without a full re-fetch
+  useEffect(() => {
+    const id = setInterval(() => setTimeTick((t) => t + 1), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Clean up the banner timer on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(bannerTimerRef.current);
+    };
+  }, []);
+
+  const showNewOrderBanner = useCallback(
+    (count) => {
+      setNewOrderBanner({ count });
+      Animated.sequence([
+        Animated.timing(bannerAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.delay(3_500),
+        Animated.timing(bannerAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start(() => setNewOrderBanner(null));
+    },
+    [bannerAnim],
+  );
 
   const loadDashboardLocation = useCallback(async ({ silent = false } = {}) => {
     try {
@@ -264,14 +318,30 @@ export default function VolunteerDashboard() {
       return;
     }
 
-    setAvailableOrders((pendingOrders || []).map(normalizeOrder));
+    const normalizedPending = (pendingOrders || []).map(normalizeOrder);
+    const incomingIds = normalizedPending.map((o) => o.order_id);
+
+    // Detect genuinely new orders (skip on the very first load)
+    if (seenOrderIdsRef.current !== null) {
+      const newIds = incomingIds.filter((id) => !seenOrderIdsRef.current.has(id));
+      if (newIds.length > 0) {
+        showNewOrderBanner(newIds.length);
+      }
+      // Keep seen-set in sync with the current pending list
+      seenOrderIdsRef.current = new Set(incomingIds);
+    } else {
+      seenOrderIdsRef.current = new Set(incomingIds);
+    }
+
+    setAvailableOrders(normalizedPending);
     setAvailableOrderEta({});
+    setLastUpdatedAt(new Date());
     setActiveOrder(volunteerOrder ? normalizeOrder(volunteerOrder) : null);
     if (!volunteerOrder) {
       setLocationSyncMessage("");
     }
     setLoading(false);
-  }, []);
+  }, [showNewOrderBanner]);
 
   useEffect(() => {
     fetchOrders();
@@ -375,49 +445,78 @@ export default function VolunteerDashboard() {
     const loadAvailableOrderEta = async () => {
       if (!hasVolunteerProfile || availableOrders.length === 0) {
         setAvailableOrderEta({});
+        setOrderCoords({});
         return;
       }
 
       if (!hasCoordinates(dashboardCoords)) {
         setAvailableOrderEta({});
+        setOrderCoords({});
         return;
       }
 
       setPreviewEtaState("loading");
 
-      const results = await Promise.all(
-        availableOrders.map(async (order) => {
-          const deliveryCoords = await lookupAddress(order.delivery_address);
+      // Only geocode orders whose address we haven't resolved yet.
+      // This makes live-updates near-instant: only new orders pay the
+      // geocoding cost; existing orders reuse the in-memory cache.
+      const uncached = availableOrders.filter(
+        (o) => !geocodeCacheRef.current[o.order_id],
+      );
 
-          if (!hasCoordinates(deliveryCoords)) {
-            return {
-              id: order.order_id,
-              eta: { state: "address_unavailable" },
-              coords: null,
-            };
-          }
-
-          const preview = buildEtaPreview(dashboardCoords, deliveryCoords);
+      const freshEntries = await Promise.all(
+        uncached.map(async (order) => {
+          const coords = await lookupAddress(order.delivery_address);
           return {
             id: order.order_id,
-            eta: preview ? { state: "ready", ...preview } : { state: "address_unavailable" },
-            coords: deliveryCoords,
+            coords: hasCoordinates(coords) ? coords : null,
           };
         }),
       );
 
-      if (cancelled) {
-        return;
+      if (cancelled) return;
+
+      // Populate cache with freshly resolved coordinates
+      for (const entry of freshEntries) {
+        if (entry.coords) {
+          geocodeCacheRef.current[entry.id] = entry.coords;
+        } else {
+          // Mark as unavailable so we don't retry on every update
+          geocodeCacheRef.current[entry.id] = null;
+        }
       }
 
-      setAvailableOrderEta(Object.fromEntries(results.map((r) => [r.id, r.eta])));
+      // Build full ETA + coord results from the now-complete cache
+      const allResults = availableOrders.map((order) => {
+        const deliveryCoords = geocodeCacheRef.current[order.order_id] ?? null;
+
+        if (!hasCoordinates(deliveryCoords)) {
+          return { id: order.order_id, eta: { state: "address_unavailable" }, coords: null };
+        }
+
+        const preview = buildEtaPreview(dashboardCoords, deliveryCoords);
+        return {
+          id: order.order_id,
+          eta: preview ? { state: "ready", ...preview } : { state: "address_unavailable" },
+          coords: deliveryCoords,
+        };
+      });
+
+      setAvailableOrderEta(Object.fromEntries(allResults.map((r) => [r.id, r.eta])));
       setOrderCoords(
-        Object.fromEntries(
-          results.filter((r) => r.coords).map((r) => [r.id, r.coords]),
-        ),
+        Object.fromEntries(allResults.filter((r) => r.coords).map((r) => [r.id, r.coords])),
       );
       setPreviewEtaState("ready");
       setPreviewEtaMessage("Previewing route distance from your current location.");
+
+      // Animate the map viewport to include all visible order pins
+      const allMapCoords = [
+        ...allResults.filter((r) => r.coords).map((r) => r.coords),
+        ...(dashboardCoords ? [dashboardCoords] : []),
+      ];
+      if (allMapCoords.length > 0) {
+        mapRef.current?.fitToAll(allMapCoords);
+      }
     };
 
     loadAvailableOrderEta();
@@ -709,8 +808,16 @@ export default function VolunteerDashboard() {
 
         {viewMode === "map" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Order Map</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Order Map</Text>
+              {lastUpdatedAt ? (
+                <Text style={styles.lastUpdatedLabel}>
+                  Updated {formatRelativeTime(lastUpdatedAt)}
+                </Text>
+              ) : null}
+            </View>
             <VolunteerMapView
+              ref={mapRef}
               volunteerCoords={dashboardCoords}
               availableOrders={availableOrders}
               orderCoords={orderCoords}
@@ -719,6 +826,16 @@ export default function VolunteerDashboard() {
               onOrderPress={(order) => setSelectedOrder(order)}
             />
           </View>
+        ) : null}
+
+        {/* ── New-order banner ───────────────────────────────────────── */}
+        {newOrderBanner ? (
+          <Animated.View style={[styles.newOrderBanner, { opacity: bannerAnim }]}>
+            <Text style={styles.newOrderBannerText}>
+              🟡 {newOrderBanner.count} new order
+              {newOrderBanner.count !== 1 ? "s" : ""} just arrived
+            </Text>
+          </Animated.View>
         ) : null}
 
         <View style={[styles.section, viewMode === "map" ? styles.sectionCompact : null]}>
@@ -801,7 +918,14 @@ export default function VolunteerDashboard() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available Orders</Text>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>Available Orders</Text>
+            {lastUpdatedAt ? (
+              <Text style={styles.lastUpdatedLabel}>
+                {formatRelativeTime(lastUpdatedAt)}
+              </Text>
+            ) : null}
+          </View>
           {loading ? (
             <Text style={styles.emptyText}>Loading available orders...</Text>
           ) : !hasVolunteerProfile ? (
@@ -995,11 +1119,39 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: theme.spacing.xl,
   },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: theme.spacing.md,
+  },
   sectionTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: theme.colors.text,
+  },
+  lastUpdatedLabel: {
+    fontSize: 12,
+    color: theme.colors.mutedText,
+    fontWeight: "500",
+  },
+  newOrderBanner: {
+    backgroundColor: theme.colors.secondary,
+    borderRadius: theme.radius.lg,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     marginBottom: theme.spacing.md,
+    alignItems: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  newOrderBannerText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: theme.colors.secondaryText,
   },
   activeCard: {
     borderWidth: 1,
