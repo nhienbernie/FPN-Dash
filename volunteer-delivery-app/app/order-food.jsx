@@ -2,7 +2,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
-import { isCustomerOrderActive } from "../lib/orderStatus";
+import { isCustomerOrderActive, ORDER_STATUS } from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
 
@@ -28,7 +28,7 @@ export default function OrderFood() {
           .limit(1)
           .maybeSingle();
 
-        if (order && isCustomerOrderActive(order.status)) {
+        if (order && (isCustomerOrderActive(order.status) || order.status === ORDER_STATUS.DELIVERED)) {
           router.replace("/order-status");
         }
 

@@ -22,18 +22,15 @@ import {
 const FIELDS = [
   {
     key: "identifier",
-    label: "Email or Username",
-    placeholder: "Enter your email or username",
+    label: "Email",
+    placeholder: "Enter your email address",
     required: true,
     autoCapitalize: "none",
     keyboardType: "email-address",
     validate: (value) => {
       const trimmed = String(value ?? "").trim();
-      if (!trimmed) return "Enter your email or username.";
-      if (trimmed.includes("@")) {
-        return isValidEmail(trimmed) ? null : "Enter a valid email address.";
-      }
-      return null;
+      if (!trimmed) return "Enter your email address.";
+      return isValidEmail(trimmed) ? null : "Enter a valid email address.";
     },
   },
   {
@@ -76,23 +73,7 @@ export default function SignInScreen() {
     setSubmitState("loading");
 
     const { identifier, password } = formValues;
-    let email = identifier.trim();
-
-    if (!email.includes("@")) {
-      const { data, error } = await supabase
-        .from("volunteers")
-        .select("email")
-        .eq("username", email)
-        .single();
-
-      if (error || !data?.email) {
-        setErrors({ general: "No account found with that username." });
-        setSubmitState("idle");
-        return;
-      }
-
-      email = data.email;
-    }
+    const email = identifier.trim();
 
     const { data: authData, error: authError } =
       await supabase.auth.signInWithPassword({ email, password });
