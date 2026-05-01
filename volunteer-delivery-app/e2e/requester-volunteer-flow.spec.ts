@@ -255,6 +255,12 @@ test.describe("requester and volunteer e2e flows", () => {
       await expect(requesterPage.getByTestId("order-status-current-status")).toContainText(
         "Delivered",
       );
+
+      const orderAgainButton = requesterPage.getByTestId("order-status-order-again");
+      await expect(orderAgainButton).toBeEnabled();
+      await orderAgainButton.click();
+      await expect(requesterPage).toHaveURL(/\/order-food$/);
+      await expect(requesterPage.getByTestId("order-food-start-order")).toBeVisible();
     } finally {
       await requesterContext.close();
       await volunteerContext.close();

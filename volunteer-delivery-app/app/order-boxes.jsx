@@ -21,7 +21,7 @@ export default function OrderBoxes() {
   };
 
   const handleContinue = () => {
-    router.push({
+    router.replace({
       pathname: "/order-items",
       params: { boxCount, currentBox: 1 },
     });

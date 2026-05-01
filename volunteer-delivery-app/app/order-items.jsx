@@ -70,7 +70,7 @@ export default function OrderItems() {
     const allSelections = [...prevSelections, selected];
 
     if (currentBox < boxCount) {
-      router.push({
+      router.replace({
         pathname: "/order-items",
         params: {
           boxCount,
@@ -79,7 +79,7 @@ export default function OrderItems() {
         },
       });
     } else {
-      router.push({
+      router.replace({
         pathname: "/order-review",
         params: {
           boxCount,

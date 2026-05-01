@@ -407,6 +407,7 @@ export default function OrderStatus() {
           onPress={() => router.replace("/order-food")}
           disabled={loading}
           style={styles.button}
+          testID="order-status-order-again"
         />
       ) : null}
 
