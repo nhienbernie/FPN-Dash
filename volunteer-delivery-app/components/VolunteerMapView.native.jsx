@@ -3,6 +3,10 @@ import MapView, { Marker } from "react-native-maps";
 import { StyleSheet, Text, View } from "react-native";
 import { theme } from "../theme";
 
+// Purple pin for pantry locations — distinct from gold (available orders)
+// and teal (active delivery).
+const PANTRY_PIN_COLOR = "#7C3AED";
+
 function computeRegion(volunteerCoords, orderCoordsList) {
   const allPoints = [
     ...(volunteerCoords ? [volunteerCoords] : []),
@@ -45,6 +49,7 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
     orderCoords,
     activeOrder,
     activeOrderCoords,
+    pantryLocations = [],
     onOrderPress,
   },
   ref,
@@ -84,6 +89,25 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
         initialRegion={region}
         showsUserLocation
       >
+        {/* Pantry location pins — always visible, rendered first so order pins
+            sit on top when they overlap. */}
+        {pantryLocations.map((pantry) => {
+          if (!pantry.coords?.latitude) return null;
+          const description = pantry.seasonal
+            ? `${pantry.hours} · ${pantry.seasonal}`
+            : pantry.hours;
+          return (
+            <Marker
+              key={pantry.id}
+              coordinate={pantry.coords}
+              title={pantry.name}
+              description={description}
+              pinColor={PANTRY_PIN_COLOR}
+            />
+          );
+        })}
+
+        {/* Available order pins */}
         {availableOrders.map((order) => {
           const coords = orderCoords[order.order_id];
           if (!coords?.latitude) return null;
@@ -98,6 +122,8 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
             />
           );
         })}
+
+        {/* Active delivery pin */}
         {activeOrder && activeOrderCoords?.latitude ? (
           <Marker
             coordinate={activeOrderCoords}
@@ -109,6 +135,10 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
       </MapView>
 
       <View style={styles.legend}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: PANTRY_PIN_COLOR }]} />
+          <Text style={styles.legendText}>Pantry locations</Text>
+        </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.colors.secondary }]} />
           <Text style={styles.legendText}>Available orders</Text>

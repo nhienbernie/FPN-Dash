@@ -45,6 +45,7 @@ import {
   ORDER_STATUS,
 } from "../lib/orderStatus";
 import { lookupAddress } from "../services/geocode";
+import { PANTRY_LOCATIONS } from "../lib/pantryLocations";
 import { supabase } from "../services/supabase";
 import { DEMO_API_BASE_URL } from "../lib/apiConfig";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
@@ -78,6 +79,25 @@ function ensureExpoLocationCleanupCompatibility() {
 }
 
 ensureExpoLocationCleanupCompatibility();
+
+// Module-level cache for pantry coordinates so they are only geocoded once
+// per app session regardless of how many times the dashboard mounts.
+let resolvedPantryLocations = null;
+
+async function resolvePantryLocations() {
+  if (resolvedPantryLocations) return resolvedPantryLocations;
+  const results = await Promise.all(
+    PANTRY_LOCATIONS.map(async (pantry) => {
+      const coords = await lookupAddress(pantry.address);
+      return {
+        ...pantry,
+        coords: coords?.latitude && coords?.longitude ? coords : null,
+      };
+    }),
+  );
+  resolvedPantryLocations = results;
+  return results;
+}
 
 async function notifyCustomerBySms(customerUid) {
   try {
@@ -134,6 +154,10 @@ export default function VolunteerDashboard() {
   const [previewEtaState, setPreviewEtaState] = useState("idle");
   const [previewEtaMessage, setPreviewEtaMessage] = useState("");
   const [viewMode, setViewMode] = useState("list");
+  const [pantryLocations, setPantryLocations] = useState(
+    // Use the cached result immediately on re-mounts
+    resolvedPantryLocations ?? [],
+  );
 
   // Live-update extras
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -152,6 +176,13 @@ export default function VolunteerDashboard() {
   const bannerAnim = useRef(new Animated.Value(0)).current;
 
   const router = useRouter();
+
+  // Geocode pantry locations once per app session (module-level cache means
+  // this is a no-op on re-mounts after the first resolve).
+  useEffect(() => {
+    if (resolvedPantryLocations) return; // already done
+    resolvePantryLocations().then(setPantryLocations);
+  }, []);
 
   // Tick every 15 s so "Updated X ago" stays current without a full re-fetch
   useEffect(() => {
@@ -868,6 +899,7 @@ export default function VolunteerDashboard() {
               orderCoords={orderCoords}
               activeOrder={activeOrder}
               activeOrderCoords={activeOrderCoords}
+              pantryLocations={pantryLocations}
               onOrderPress={(order) => setSelectedOrder(order)}
             />
           </View>
