@@ -48,11 +48,20 @@ function sanitizeDeliveryProof(proof) {
   return { photoUri, ...(capturedAt ? { capturedAt } : {}) };
 }
 
+function sanitizeRelinquishment(r) {
+  if (!r || typeof r !== "object") return null;
+  const relinquishedBy = normalizeText(r.relinquishedBy);
+  const relinquishedAt = normalizeText(r.relinquishedAt);
+  if (!relinquishedBy) return null;
+  return { relinquishedBy, ...(relinquishedAt ? { relinquishedAt } : {}) };
+}
+
 export function buildOrderNotes({
   selectedItems = [],
   userNotes = "",
   tracking = null,
   deliveryProof = null,
+  relinquishment = null,
 }) {
   const cleanedItems = selectedItems
     .map((item) => normalizeText(item))
@@ -60,8 +69,9 @@ export function buildOrderNotes({
   const cleanedNotes = normalizeText(userNotes);
   const cleanedTracking = sanitizeTracking(tracking);
   const cleanedProof = sanitizeDeliveryProof(deliveryProof);
+  const cleanedRelinquishment = sanitizeRelinquishment(relinquishment);
 
-  if (cleanedItems.length === 0 && !cleanedTracking && !cleanedProof) {
+  if (cleanedItems.length === 0 && !cleanedTracking && !cleanedProof && !cleanedRelinquishment) {
     return cleanedNotes || null;
   }
 
@@ -78,6 +88,10 @@ export function buildOrderNotes({
     payload.deliveryProof = cleanedProof;
   }
 
+  if (cleanedRelinquishment) {
+    payload.relinquishment = cleanedRelinquishment;
+  }
+
   return `${WORKAROUND_PREFIX}${JSON.stringify(payload)}`;
 }
 
@@ -90,6 +104,7 @@ export function parseOrderNotes(notes) {
       userNotes: "",
       tracking: null,
       deliveryProof: null,
+      relinquishment: null,
       isWorkaround: false,
     };
   }
@@ -100,6 +115,7 @@ export function parseOrderNotes(notes) {
       userNotes: rawNotes,
       tracking: null,
       deliveryProof: null,
+      relinquishment: null,
       isWorkaround: false,
     };
   }
@@ -117,6 +133,7 @@ export function parseOrderNotes(notes) {
       userNotes: normalizeText(payload.userNotes),
       tracking: sanitizeTracking(payload.tracking),
       deliveryProof: sanitizeDeliveryProof(payload.deliveryProof ?? null),
+      relinquishment: sanitizeRelinquishment(payload.relinquishment ?? null),
       isWorkaround: true,
     };
   } catch (_error) {
@@ -124,6 +141,7 @@ export function parseOrderNotes(notes) {
       selectedItems: [],
       userNotes: rawNotes,
       tracking: null,
+      relinquishment: null,
       isWorkaround: false,
     };
   }
@@ -138,6 +156,22 @@ export function attachDeliveryProof(notes, photoUri) {
     deliveryProof: photoUri
       ? { photoUri, capturedAt: new Date().toISOString() }
       : null,
+  });
+}
+
+// Stamps the notes with who released the order and when, then clears tracking
+// so stale volunteer-location data is not visible to the next volunteer.
+export function buildRelinquishmentNotes(notes, volunteerUid) {
+  const existing = parseOrderNotes(notes);
+  return buildOrderNotes({
+    selectedItems: existing.selectedItems,
+    userNotes: existing.userNotes,
+    tracking: null,
+    deliveryProof: existing.deliveryProof,
+    relinquishment: {
+      relinquishedBy: volunteerUid,
+      relinquishedAt: new Date().toISOString(),
+    },
   });
 }
 

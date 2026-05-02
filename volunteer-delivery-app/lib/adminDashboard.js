@@ -352,20 +352,33 @@ export function getOrderStatusBadge(order) {
 export function buildVolunteerStats(orders, volunteersById) {
   const statsById = {};
 
-  for (const order of orders) {
-    if (!order.volunteer_uid) continue;
+  const ensureEntry = (uid) => {
+    if (!statsById[uid]) {
+      statsById[uid] = { completed: 0, inProgress: 0, relinquished: 0 };
+    }
+  };
 
-    if (!statsById[order.volunteer_uid]) {
-      statsById[order.volunteer_uid] = { completed: 0, inProgress: 0 };
+  for (const order of orders) {
+    // Tally active / delivered orders by their current volunteer_uid
+    if (order.volunteer_uid) {
+      ensureEntry(order.volunteer_uid);
+      if (order.status === ORDER_STATUS.DELIVERED) {
+        statsById[order.volunteer_uid].completed += 1;
+      } else if (
+        order.status === ORDER_STATUS.ACCEPTED ||
+        order.status === ORDER_STATUS.IN_TRANSIT
+      ) {
+        statsById[order.volunteer_uid].inProgress += 1;
+      }
     }
 
-    if (order.status === ORDER_STATUS.DELIVERED) {
-      statsById[order.volunteer_uid].completed += 1;
-    } else if (
-      order.status === ORDER_STATUS.ACCEPTED ||
-      order.status === ORDER_STATUS.IN_TRANSIT
-    ) {
-      statsById[order.volunteer_uid].inProgress += 1;
+    // Tally relinquishments — stored in notes so they survive the volunteer_uid
+    // being cleared when the order was returned to the queue.
+    const parsedNotes = parseOrderNotes(order.notes);
+    if (parsedNotes.relinquishment?.relinquishedBy) {
+      const uid = parsedNotes.relinquishment.relinquishedBy;
+      ensureEntry(uid);
+      statsById[uid].relinquished += 1;
     }
   }
 
@@ -377,7 +390,11 @@ export function buildVolunteerStats(orders, volunteersById) {
         name: normalizeText(volunteersById[uid]) || "Unknown",
         completed: stats.completed,
         inProgress: stats.inProgress,
+        relinquished: stats.relinquished,
         total,
+        // Completion rate only reflects finished vs. active assignments —
+        // relinquishments are tracked separately and intentionally excluded
+        // so volunteers aren't penalised for circumstances outside their control.
         completionRate: total > 0 ? Math.round((stats.completed / total) * 100) : 0,
       };
     })

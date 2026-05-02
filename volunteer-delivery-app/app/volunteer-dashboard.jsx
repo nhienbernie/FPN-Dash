@@ -33,6 +33,7 @@ import {
 } from "../lib/deliveryTracking";
 import { useOrdersFeedSubscription } from "../lib/orderRealtime";
 import {
+  buildRelinquishmentNotes,
   parseOrderNotes,
   updateOrderTracking,
 } from "../lib/orderSelectionWorkaround";
@@ -664,6 +665,50 @@ export default function VolunteerDashboard() {
     }
   };
 
+  const handleReleaseOrder = () => {
+    if (!activeOrder || !userId) return;
+
+    Alert.alert(
+      "Release order?",
+      "The order will go back to the available queue so another volunteer can pick it up. Your current progress will be saved in the delivery notes.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Release",
+          style: "destructive",
+          onPress: async () => {
+            setSubmitting(true);
+            try {
+              const updatedNotes = buildRelinquishmentNotes(
+                activeOrder.notes,
+                userId,
+              );
+              const { error } = await supabase
+                .from("orders")
+                .update({
+                  status: ORDER_STATUS.PENDING,
+                  volunteer_uid: null,
+                  notes: updatedNotes,
+                })
+                .eq("order_id", activeOrder.order_id)
+                .eq("volunteer_uid", userId);
+
+              if (error) {
+                console.error("Error releasing order:", error);
+                Alert.alert("Error", "Unable to release this order right now.");
+                return;
+              }
+
+              fetchOrders();
+            } finally {
+              setSubmitting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const openDeliveryDetails = () => {
     if (!activeOrder) return;
 
@@ -909,6 +954,14 @@ export default function VolunteerDashboard() {
                   testID="volunteer-dashboard-mark-delivered"
                 />
               ) : null}
+              <AppButton
+                title="Release back to queue"
+                variant="danger"
+                onPress={handleReleaseOrder}
+                disabled={submitting}
+                style={styles.releaseButton}
+                testID="volunteer-dashboard-release-order"
+              />
             </View>
           ) : (
             <Text style={styles.emptyText}>
@@ -1192,6 +1245,10 @@ const styles = StyleSheet.create({
   refreshButton: {
     width: "100%",
     marginBottom: theme.spacing.md,
+  },
+  releaseButton: {
+    width: "100%",
+    marginTop: theme.spacing.md,
   },
   viewToggleRow: {
     flexDirection: "row",

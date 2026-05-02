@@ -1022,6 +1022,7 @@ export default function AdminDashboard() {
                 <Text style={styles.volunteerMeta}>
                   {v.inProgress > 0 ? `${v.inProgress} in progress · ` : ""}
                   {v.completed} delivered
+                  {v.relinquished > 0 ? ` · ${v.relinquished} released` : ""}
                 </Text>
               </View>
               <View style={styles.reliabilityBadge}>
