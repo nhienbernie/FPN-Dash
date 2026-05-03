@@ -149,6 +149,7 @@ export default function AdminDashboard() {
           .from("reports")
           .select(
             `
+              report_id,
               order_id,
               reporter_id,
               reported_id,
@@ -640,19 +641,11 @@ export default function AdminDashboard() {
     setBusyKey(`report-${report.order_id}-${nextStatus}`);
 
     try {
-      let query = supabase
-        .from("reports")
-        .update({ status: nextStatus })
-        .eq("order_id", report.order_id)
-        .eq("reporter_id", report.reporter_id);
-
-      if (report.created_at) {
-        query = query.eq("created_at", report.created_at);
-      }
-
-      const { data, error } = await query.select(
-        "order_id, reporter_id, created_at, status",
-      );
+      const { data, error } = await supabase
+      .from("reports")
+      .update({ status: nextStatus })
+      .eq("report_id", report.report_id)
+      .select("report_id, status");
 
       if (error) {
         throw error;
