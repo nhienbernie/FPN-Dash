@@ -183,10 +183,22 @@ export default function VolunteerDashboard() {
 
   const router = useRouter();
 
-  // Fetch and geocode pantry locations on every mount so the map always
-  // reflects the latest data from Supabase (e.g. after an admin adds a site).
+  // Fetch pantry locations on mount and keep them live via realtime.
+  // Any INSERT, UPDATE, or DELETE on the pantries table triggers a re-fetch
+  // so the map reflects admin changes (add, edit, deactivate, delete) instantly.
   useEffect(() => {
     resolvePantryLocations().then(setPantryLocations);
+
+    const channel = supabase
+      .channel("pantries-map-" + Math.random().toString(36).slice(2))
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pantries" },
+        () => { resolvePantryLocations().then(setPantryLocations); },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   // Tick every 15 s so "Updated X ago" stays current without a full re-fetch

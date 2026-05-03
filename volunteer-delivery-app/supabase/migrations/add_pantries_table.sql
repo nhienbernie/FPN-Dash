@@ -7,6 +7,9 @@ create table if not exists pantries (
   created_at timestamptz not null default now()
 );
 
+-- Enable realtime so the volunteer map reacts to admin changes instantly
+alter publication supabase_realtime add table pantries;
+
 -- Seed with the existing hardcoded drive-thru locations
 insert into pantries (name, address, hours) values
   ('Christ Cornerstone Church', '69 King Avenue, Newark, OH 43055', 'Weds: 4:30–6pm'),
