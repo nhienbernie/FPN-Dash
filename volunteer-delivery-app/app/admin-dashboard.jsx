@@ -51,6 +51,11 @@ const TAB_COPY = {
     subtitle:
       "Manage the global requester menu by editing sections and the items inside them.",
   },
+  pantries: {
+    title: "Pantry locations",
+    subtitle:
+      "Add, edit, and deactivate drive-thru distribution sites shown on the volunteer map.",
+  },
   cancellations: {
     title: "Order cancellations",
     subtitle:
@@ -113,12 +118,14 @@ export default function AdminDashboard() {
   const [focusedComplaint, setFocusedComplaint] = useState(null);
   const [sectionEditor, setSectionEditor] = useState(null);
   const [itemEditor, setItemEditor] = useState(null);
+  const [pantryEditor, setPantryEditor] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     orders: [],
     reports: [],
     itemCatalog: [],
     customersById: {},
     volunteersById: {},
+    pantries: [],
   });
 
   const loadDashboard = useCallback(async ({ silent = false } = {}) => {
@@ -133,6 +140,7 @@ export default function AdminDashboard() {
         itemsResult,
         customersResult,
         volunteersResult,
+        pantriesResult,
       ] = await Promise.all([
         supabase
           .from("orders")
@@ -184,6 +192,10 @@ export default function AdminDashboard() {
           .order("label", { ascending: true }),
         supabase.from("customers").select("uid, first_name, last_name"),
         supabase.from("volunteers").select("uid, first_name, last_name"),
+        supabase
+          .from("pantries")
+          .select("id, name, address, hours, active")
+          .order("name", { ascending: true }),
       ]);
 
       const possibleErrors = [
@@ -192,6 +204,7 @@ export default function AdminDashboard() {
         itemsResult.error,
         customersResult.error,
         volunteersResult.error,
+        pantriesResult.error,
       ].filter(Boolean);
 
       if (possibleErrors.length > 0) {
@@ -204,6 +217,7 @@ export default function AdminDashboard() {
         itemCatalog: itemsResult.data ?? [],
         customersById: buildProfileMap(customersResult.data),
         volunteersById: buildProfileMap(volunteersResult.data),
+        pantries: pantriesResult.data ?? [],
       });
       setLastRefreshedAt(new Date().toISOString());
     } catch (error) {
@@ -654,6 +668,128 @@ export default function AdminDashboard() {
     }
   };
 
+  const openCreatePantry = () => {
+    setPantryEditor({ mode: "create", id: null, name: "", address: "", hours: "" });
+  };
+
+  const openEditPantry = (pantry) => {
+    setPantryEditor({
+      mode: "edit",
+      id: pantry.id,
+      name: pantry.name,
+      address: pantry.address,
+      hours: pantry.hours ?? "",
+    });
+  };
+
+  const closePantryEditor = () => {
+    if (busyKey === "pantry-save") return;
+    setPantryEditor(null);
+  };
+
+  const handleSavePantry = async () => {
+    if (!pantryEditor) return;
+
+    const name = pantryEditor.name.trim();
+    const address = pantryEditor.address.trim();
+    const hours = pantryEditor.hours.trim();
+
+    if (!name) {
+      Alert.alert("Missing Name", "Please enter the pantry name.");
+      return;
+    }
+
+    if (!address) {
+      Alert.alert("Missing Address", "Please enter the pantry address.");
+      return;
+    }
+
+    setBusyKey("pantry-save");
+
+    try {
+      if (pantryEditor.mode === "create") {
+        const { error } = await supabase
+          .from("pantries")
+          .insert({ name, address, hours, active: true });
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("pantries")
+          .update({ name, address, hours })
+          .eq("id", pantryEditor.id);
+
+        if (error) throw error;
+      }
+
+      setPantryEditor(null);
+      await loadDashboard({ silent: true });
+    } catch (error) {
+      console.error("Error saving pantry:", error);
+      Alert.alert("Unable to Save Pantry", error.message || "Please try again.");
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const handleTogglePantryActive = async (pantry, nextActive) => {
+    setBusyKey(`pantry-toggle-${pantry.id}`);
+
+    try {
+      const { error } = await supabase
+        .from("pantries")
+        .update({ active: nextActive })
+        .eq("id", pantry.id);
+
+      if (error) throw error;
+
+      await loadDashboard({ silent: true });
+    } catch (error) {
+      console.error("Error updating pantry visibility:", error);
+      Alert.alert(
+        nextActive ? "Unable to Restore Pantry" : "Unable to Deactivate Pantry",
+        error.message || "Please try again.",
+      );
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const performDeletePantry = async (pantry) => {
+    setBusyKey(`pantry-delete-${pantry.id}`);
+
+    try {
+      const { error } = await supabase
+        .from("pantries")
+        .delete()
+        .eq("id", pantry.id);
+
+      if (error) throw error;
+
+      await loadDashboard({ silent: true });
+    } catch (error) {
+      console.error("Error deleting pantry:", error);
+      Alert.alert("Unable to Delete Pantry", error.message || "Please try again.");
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const handleDeletePantry = (pantry) => {
+    Alert.alert(
+      "Delete this pantry?",
+      `${pantry.name} will be removed from the volunteer map permanently.`,
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void performDeletePantry(pantry),
+        },
+      ],
+    );
+  };
+
   const handleCancelOrder = (order) => {
     const customerLabel = getCustomerLabel(order, dashboardData.customersById);
     const volunteerLabel = order.volunteer_uid
@@ -799,6 +935,45 @@ export default function AdminDashboard() {
       </View>
     );
   };
+
+  const renderPantryCard = (pantry) => (
+    <View key={pantry.id} style={styles.queueCard}>
+      <View style={styles.queueCardHeader}>
+        <View style={styles.queueCardTitleBlock}>
+          <Text style={styles.queueCardTitle}>{pantry.name}</Text>
+          <Text style={styles.queueCardMeta}>{pantry.hours || "Hours not set"}</Text>
+        </View>
+        <View style={[styles.badge, pantry.active ? styles.badgeVisible : styles.badgeMuted]}>
+          <Text style={styles.badgeText}>{pantry.active ? "Active" : "Inactive"}</Text>
+        </View>
+      </View>
+
+      <Text style={styles.queueLabel}>Address</Text>
+      <Text style={styles.queueValue}>{pantry.address}</Text>
+
+      <View style={styles.actionRow}>
+        <AppButton
+          title="Edit"
+          onPress={() => openEditPantry(pantry)}
+          style={styles.inlineAction}
+        />
+        <AppButton
+          title={pantry.active ? "Deactivate" : "Restore"}
+          variant="ghost"
+          onPress={() => handleTogglePantryActive(pantry, !pantry.active)}
+          disabled={busyKey === `pantry-toggle-${pantry.id}`}
+          style={styles.inlineAction}
+        />
+        <AppButton
+          title="Delete"
+          variant="danger"
+          onPress={() => handleDeletePantry(pantry)}
+          disabled={busyKey === `pantry-delete-${pantry.id}`}
+          style={styles.inlineAction}
+        />
+      </View>
+    </View>
+  );
 
   const renderCancellationCard = (order) => {
     const statusMeta = getOrderStatusBadge(order);
@@ -1146,6 +1321,32 @@ export default function AdminDashboard() {
             </Text>
           ) : (
             menuSections.map(renderMenuSectionCard)
+          )}
+        </>
+      );
+    }
+
+    if (activeTab === "pantries") {
+      if (loading) {
+        return <Text style={styles.emptyText}>Loading pantry locations...</Text>;
+      }
+
+      return (
+        <>
+          <View style={styles.menuSetupToolbar}>
+            <AppButton
+              title="Add Pantry"
+              variant="secondary"
+              onPress={openCreatePantry}
+              style={styles.menuToolbarButton}
+            />
+          </View>
+          {dashboardData.pantries.length === 0 ? (
+            <Text style={styles.emptyText}>
+              No pantry locations have been added yet.
+            </Text>
+          ) : (
+            dashboardData.pantries.map(renderPantryCard)
           )}
         </>
       );
@@ -1749,6 +1950,98 @@ export default function AdminDashboard() {
             ) : null}
           </View>
         </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(pantryEditor)}
+        transparent
+        animationType="slide"
+        onRequestClose={closePantryEditor}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalCard}>
+            {pantryEditor ? (
+              <>
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalTitleBlock}>
+                    <Text style={styles.modalTitle}>
+                      {pantryEditor.mode === "create" ? "Add pantry" : "Edit pantry"}
+                    </Text>
+                    <Text style={styles.modalSubtitle}>
+                      {pantryEditor.mode === "create"
+                        ? "New locations appear on the volunteer map once active."
+                        : "Changes take effect after the volunteer app refreshes."}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={closePantryEditor} activeOpacity={0.7}>
+                    <Text style={styles.modalClose}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  contentContainerStyle={styles.modalContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text style={styles.inputLabel}>Name</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Christ Cornerstone Church"
+                    placeholderTextColor={theme.colors.mutedText}
+                    value={pantryEditor.name}
+                    onChangeText={(text) =>
+                      setPantryEditor((p) => p ? { ...p, name: text } : p)
+                    }
+                  />
+
+                  <Text style={[styles.inputLabel, { marginTop: theme.spacing.md }]}>
+                    Address
+                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="69 King Avenue, Newark, OH 43055"
+                    placeholderTextColor={theme.colors.mutedText}
+                    value={pantryEditor.address}
+                    onChangeText={(text) =>
+                      setPantryEditor((p) => p ? { ...p, address: text } : p)
+                    }
+                  />
+
+                  <Text style={[styles.inputLabel, { marginTop: theme.spacing.md }]}>
+                    Hours
+                  </Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Weds: 4:30–6pm"
+                    placeholderTextColor={theme.colors.mutedText}
+                    value={pantryEditor.hours}
+                    onChangeText={(text) =>
+                      setPantryEditor((p) => p ? { ...p, hours: text } : p)
+                    }
+                  />
+
+                  <View style={styles.modalActions}>
+                    <AppButton
+                      title={pantryEditor.mode === "create" ? "Add Pantry" : "Save Changes"}
+                      onPress={handleSavePantry}
+                      disabled={busyKey === "pantry-save"}
+                      style={styles.modalActionButton}
+                    />
+                    <AppButton
+                      title="Close"
+                      variant="ghost"
+                      onPress={closePantryEditor}
+                      disabled={busyKey === "pantry-save"}
+                      style={styles.modalActionButton}
+                    />
+                  </View>
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

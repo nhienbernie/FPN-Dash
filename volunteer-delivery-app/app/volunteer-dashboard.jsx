@@ -86,8 +86,25 @@ let resolvedPantryLocations = null;
 
 async function resolvePantryLocations() {
   if (resolvedPantryLocations) return resolvedPantryLocations;
+
+  // Prefer live data from Supabase; fall back to hardcoded list if unavailable.
+  let source = PANTRY_LOCATIONS;
+  try {
+    const { data, error } = await supabase
+      .from("pantries")
+      .select("id, name, address, hours, active")
+      .eq("active", true)
+      .order("name", { ascending: true });
+
+    if (!error && data && data.length > 0) {
+      source = data;
+    }
+  } catch (_err) {
+    // silently fall through to hardcoded list
+  }
+
   const results = await Promise.all(
-    PANTRY_LOCATIONS.map(async (pantry) => {
+    source.map(async (pantry) => {
       const coords = await lookupAddress(pantry.address);
       return {
         ...pantry,

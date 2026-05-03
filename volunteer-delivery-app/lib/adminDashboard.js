@@ -4,6 +4,7 @@ import { theme } from "../theme";
 
 export const ADMIN_TABS = [
   { key: "menu", label: "Menu Setup" },
+  { key: "pantries", label: "Pantries" },
   { key: "cancellations", label: "Cancellations" },
   { key: "complaints", label: "Complaints" },
   { key: "analytics", label: "Analytics" },
