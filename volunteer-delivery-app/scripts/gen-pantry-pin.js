@@ -119,9 +119,9 @@ const MARKERS = [
     // Drive-thru pantry: purple star, 15 pt on screen
     baseName: "pantry-pin",
     sizes: [
-      { suffix: "",    px: 15, outerR: 6.5,  innerR: 2.6, borderWidth: 1.3 },
-      { suffix: "@2x", px: 30, outerR: 13.0, innerR: 5.2, borderWidth: 1.8 },
-      { suffix: "@3x", px: 45, outerR: 19.5, innerR: 7.8, borderWidth: 2.2 },
+      { suffix: "",    px: 22, outerR: 9.5,  innerR: 3.8, borderWidth: 1.5 },
+      { suffix: "@2x", px: 44, outerR: 19.0, innerR: 7.6, borderWidth: 2.0 },
+      { suffix: "@3x", px: 66, outerR: 28.5, innerR: 11.4, borderWidth: 2.5 },
     ],
     render: (x, y, px, s) =>
       starPixel(x, y, px, s.outerR, s.innerR, s.borderWidth, PURPLE),
