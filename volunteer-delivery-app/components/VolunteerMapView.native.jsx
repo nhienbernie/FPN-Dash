@@ -5,7 +5,8 @@ import { theme } from "../theme";
 
 // Purple for pantry locations — distinct from gold (available orders)
 // and teal (active delivery).
-const PANTRY_PIN_COLOR = "#7C3AED";
+const PANTRY_PIN_COLOR  = "#7C3AED"; // purple  — drive-thru pantries
+const ACTIVE_PIN_COLOR  = "#F97316"; // orange  — bright/saturated so Android pinColor stays accurate
 const PANTRY_PIN_IMAGE = require("../assets/pantry-pin.png");
 
 function computeRegion(volunteerCoords, orderCoordsList) {
@@ -129,7 +130,7 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
             coordinate={activeOrderCoords}
             title={`Active: ${activeOrder.name}`}
             description={activeOrder.delivery_address}
-            pinColor={theme.colors.primary}
+            pinColor={ACTIVE_PIN_COLOR}
           />
         ) : null}
       </MapView>
@@ -145,7 +146,7 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
         </View>
         {activeOrder ? (
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: theme.colors.primary }]} />
+            <View style={[styles.legendDot, { backgroundColor: ACTIVE_PIN_COLOR }]} />
             <Text style={styles.legendText}>Your delivery</Text>
           </View>
         ) : null}
