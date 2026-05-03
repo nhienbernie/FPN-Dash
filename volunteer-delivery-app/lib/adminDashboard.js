@@ -375,16 +375,17 @@ export function buildVolunteerStats(orders, volunteersById) {
     // Tally relinquishments — stored in notes so they survive the volunteer_uid
     // being cleared when the order was returned to the queue.
     const parsedNotes = parseOrderNotes(order.notes);
-    if (parsedNotes.relinquishment?.relinquishedBy) {
-      const uid = parsedNotes.relinquishment.relinquishedBy;
-      ensureEntry(uid);
-      statsById[uid].relinquished += 1;
+    for (const r of parsedNotes.relinquishments) {
+      ensureEntry(r.relinquishedBy);
+      statsById[r.relinquishedBy].relinquished += 1;
     }
   }
 
   return Object.entries(statsById)
     .map(([uid, stats]) => {
       const total = stats.completed + stats.inProgress;
+      // finalized = outcomes that are fully resolved (delivered or released back)
+      const finalized = stats.completed + stats.relinquished;
       return {
         uid,
         name: normalizeText(volunteersById[uid]) || "Unknown",
@@ -392,10 +393,7 @@ export function buildVolunteerStats(orders, volunteersById) {
         inProgress: stats.inProgress,
         relinquished: stats.relinquished,
         total,
-        // Completion rate only reflects finished vs. active assignments —
-        // relinquishments are tracked separately and intentionally excluded
-        // so volunteers aren't penalised for circumstances outside their control.
-        completionRate: total > 0 ? Math.round((stats.completed / total) * 100) : 0,
+        completionRate: finalized > 0 ? Math.round((stats.completed / finalized) * 100) : 0,
       };
     })
     .sort((a, b) => b.completed - a.completed);

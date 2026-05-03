@@ -56,12 +56,17 @@ function sanitizeRelinquishment(r) {
   return { relinquishedBy, ...(relinquishedAt ? { relinquishedAt } : {}) };
 }
 
+function sanitizeRelinquishments(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(sanitizeRelinquishment).filter(Boolean);
+}
+
 export function buildOrderNotes({
   selectedItems = [],
   userNotes = "",
   tracking = null,
   deliveryProof = null,
-  relinquishment = null,
+  relinquishments = [],
 }) {
   const cleanedItems = selectedItems
     .map((item) => normalizeText(item))
@@ -69,9 +74,9 @@ export function buildOrderNotes({
   const cleanedNotes = normalizeText(userNotes);
   const cleanedTracking = sanitizeTracking(tracking);
   const cleanedProof = sanitizeDeliveryProof(deliveryProof);
-  const cleanedRelinquishment = sanitizeRelinquishment(relinquishment);
+  const cleanedRelinquishments = sanitizeRelinquishments(relinquishments);
 
-  if (cleanedItems.length === 0 && !cleanedTracking && !cleanedProof && !cleanedRelinquishment) {
+  if (cleanedItems.length === 0 && !cleanedTracking && !cleanedProof && cleanedRelinquishments.length === 0) {
     return cleanedNotes || null;
   }
 
@@ -88,8 +93,8 @@ export function buildOrderNotes({
     payload.deliveryProof = cleanedProof;
   }
 
-  if (cleanedRelinquishment) {
-    payload.relinquishment = cleanedRelinquishment;
+  if (cleanedRelinquishments.length > 0) {
+    payload.relinquishments = cleanedRelinquishments;
   }
 
   return `${WORKAROUND_PREFIX}${JSON.stringify(payload)}`;
@@ -104,7 +109,7 @@ export function parseOrderNotes(notes) {
       userNotes: "",
       tracking: null,
       deliveryProof: null,
-      relinquishment: null,
+      relinquishments: [],
       isWorkaround: false,
     };
   }
@@ -115,7 +120,7 @@ export function parseOrderNotes(notes) {
       userNotes: rawNotes,
       tracking: null,
       deliveryProof: null,
-      relinquishment: null,
+      relinquishments: [],
       isWorkaround: false,
     };
   }
@@ -128,12 +133,19 @@ export function parseOrderNotes(notes) {
           .filter(Boolean)
       : [];
 
+    // Migrate legacy single-object relinquishment to array
+    const rawRelinquishments = Array.isArray(payload.relinquishments)
+      ? payload.relinquishments
+      : payload.relinquishment
+        ? [payload.relinquishment]
+        : [];
+
     return {
       selectedItems,
       userNotes: normalizeText(payload.userNotes),
       tracking: sanitizeTracking(payload.tracking),
       deliveryProof: sanitizeDeliveryProof(payload.deliveryProof ?? null),
-      relinquishment: sanitizeRelinquishment(payload.relinquishment ?? null),
+      relinquishments: sanitizeRelinquishments(rawRelinquishments),
       isWorkaround: true,
     };
   } catch (_error) {
@@ -141,7 +153,7 @@ export function parseOrderNotes(notes) {
       selectedItems: [],
       userNotes: rawNotes,
       tracking: null,
-      relinquishment: null,
+      relinquishments: [],
       isWorkaround: false,
     };
   }
@@ -168,10 +180,10 @@ export function buildRelinquishmentNotes(notes, volunteerUid) {
     userNotes: existing.userNotes,
     tracking: null,
     deliveryProof: existing.deliveryProof,
-    relinquishment: {
-      relinquishedBy: volunteerUid,
-      relinquishedAt: new Date().toISOString(),
-    },
+    relinquishments: [
+      ...existing.relinquishments,
+      { relinquishedBy: volunteerUid, relinquishedAt: new Date().toISOString() },
+    ],
   });
 }
 
@@ -191,5 +203,7 @@ export function updateOrderTracking(notes, trackingUpdates) {
     selectedItems: existing.selectedItems,
     userNotes: existing.userNotes,
     tracking: nextTracking,
+    deliveryProof: existing.deliveryProof,
+    relinquishments: existing.relinquishments,
   });
 }
