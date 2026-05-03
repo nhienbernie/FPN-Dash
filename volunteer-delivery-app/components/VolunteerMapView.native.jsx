@@ -104,6 +104,7 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
               title={pantry.name}
               description={description}
               anchor={{ x: 0.5, y: 0.5 }}
+              tracksViewChanges={false}
             >
               <View style={styles.pantryDot} />
             </Marker>
