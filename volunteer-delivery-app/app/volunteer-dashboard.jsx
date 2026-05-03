@@ -80,13 +80,7 @@ function ensureExpoLocationCleanupCompatibility() {
 
 ensureExpoLocationCleanupCompatibility();
 
-// Module-level cache for pantry coordinates so they are only geocoded once
-// per app session regardless of how many times the dashboard mounts.
-let resolvedPantryLocations = null;
-
 async function resolvePantryLocations() {
-  if (resolvedPantryLocations) return resolvedPantryLocations;
-
   // Prefer live data from Supabase; fall back to hardcoded list if unavailable.
   let source = PANTRY_LOCATIONS;
   try {
@@ -103,7 +97,7 @@ async function resolvePantryLocations() {
     // silently fall through to hardcoded list
   }
 
-  const results = await Promise.all(
+  return Promise.all(
     source.map(async (pantry) => {
       const coords = await lookupAddress(pantry.address);
       return {
@@ -112,8 +106,6 @@ async function resolvePantryLocations() {
       };
     }),
   );
-  resolvedPantryLocations = results;
-  return results;
 }
 
 async function notifyCustomerBySms(customerUid) {
@@ -171,10 +163,7 @@ export default function VolunteerDashboard() {
   const [previewEtaState, setPreviewEtaState] = useState("idle");
   const [previewEtaMessage, setPreviewEtaMessage] = useState("");
   const [viewMode, setViewMode] = useState("list");
-  const [pantryLocations, setPantryLocations] = useState(
-    // Use the cached result immediately on re-mounts
-    resolvedPantryLocations ?? [],
-  );
+  const [pantryLocations, setPantryLocations] = useState([]);
 
   // Live-update extras
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
@@ -194,10 +183,9 @@ export default function VolunteerDashboard() {
 
   const router = useRouter();
 
-  // Geocode pantry locations once per app session (module-level cache means
-  // this is a no-op on re-mounts after the first resolve).
+  // Fetch and geocode pantry locations on every mount so the map always
+  // reflects the latest data from Supabase (e.g. after an admin adds a site).
   useEffect(() => {
-    if (resolvedPantryLocations) return; // already done
     resolvePantryLocations().then(setPantryLocations);
   }, []);
 

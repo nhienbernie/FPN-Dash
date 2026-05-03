@@ -204,7 +204,6 @@ export default function AdminDashboard() {
         itemsResult.error,
         customersResult.error,
         volunteersResult.error,
-        pantriesResult.error,
       ].filter(Boolean);
 
       if (possibleErrors.length > 0) {
@@ -217,7 +216,7 @@ export default function AdminDashboard() {
         itemCatalog: itemsResult.data ?? [],
         customersById: buildProfileMap(customersResult.data),
         volunteersById: buildProfileMap(volunteersResult.data),
-        pantries: pantriesResult.data ?? [],
+        pantries: pantriesResult.error ? [] : (pantriesResult.data ?? []),
       });
       setLastRefreshedAt(new Date().toISOString());
     } catch (error) {
