@@ -685,16 +685,11 @@ export default function VolunteerDashboard() {
 
     setSubmitting(true);
     try {
-      const nextNotes =
-        nextStatus === ORDER_STATUS.DELIVERED
-          ? activeOrder.notes
-          : await buildTrackedNotes(activeOrder.notes, nextStatus);
-
       const { data, error } = await supabase
         .from("orders")
         .update({
           status: nextStatus,
-          notes: nextNotes,
+          notes: activeOrder.notes,
         })
         .eq("order_id", activeOrder.order_id)
         .eq("volunteer_uid", userId)
@@ -716,6 +711,20 @@ export default function VolunteerDashboard() {
       }
 
       fetchOrders();
+
+      // Capture location in the background and patch notes — skip for delivered
+      // since the delivery is already complete by then.
+      if (nextStatus !== ORDER_STATUS.DELIVERED) {
+        const orderId = activeOrder.order_id;
+        buildTrackedNotes(activeOrder.notes, nextStatus).then((nextNotes) => {
+          if (nextNotes !== activeOrder.notes) {
+            supabase
+              .from("orders")
+              .update({ notes: nextNotes })
+              .eq("order_id", orderId);
+          }
+        });
+      }
     } finally {
       setSubmitting(false);
     }
