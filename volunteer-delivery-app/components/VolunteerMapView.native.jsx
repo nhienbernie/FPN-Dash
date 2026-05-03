@@ -3,9 +3,10 @@ import MapView, { Marker } from "react-native-maps";
 import { StyleSheet, Text, View } from "react-native";
 import { theme } from "../theme";
 
-// Purple pin for pantry locations — distinct from gold (available orders)
+// Purple for pantry locations — distinct from gold (available orders)
 // and teal (active delivery).
 const PANTRY_PIN_COLOR = "#7C3AED";
+const PANTRY_PIN_IMAGE = require("../assets/pantry-pin.png");
 
 function computeRegion(volunteerCoords, orderCoordsList) {
   const allPoints = [
@@ -56,8 +57,6 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
 ) {
   const mapViewRef = useRef(null);
 
-  // Exposed imperative API — parent calls fitToAll(coordsArray) after new
-  // orders arrive so the viewport smoothly animates to include all markers.
   useImperativeHandle(
     ref,
     () => ({
@@ -89,9 +88,8 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
         initialRegion={region}
         showsUserLocation
       >
-        {/* Pantry location pins — small dots so they don't compete visually
-            with the full-height order pins. Rendered first so order pins
-            sit on top when they overlap. */}
+        {/* Pantry location pins — image-based marker so positioning is rock
+            solid during zoom. Rendered first so order pins sit on top. */}
         {pantryLocations.map((pantry) => {
           if (!pantry.coords?.latitude) return null;
           const description = pantry.seasonal
@@ -103,11 +101,9 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
               coordinate={pantry.coords}
               title={pantry.name}
               description={description}
+              image={PANTRY_PIN_IMAGE}
               anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={false}
-            >
-              <View style={styles.pantryDot} />
-            </Marker>
+            />
           );
         })}
 
@@ -141,7 +137,7 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
       <View style={styles.legend}>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: PANTRY_PIN_COLOR }]} />
-          <Text style={styles.legendText}>Pantry locations</Text>
+          <Text style={styles.legendText}>Drive-thru pantries</Text>
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: theme.colors.secondary }]} />
@@ -195,18 +191,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: theme.colors.text,
-  },
-  pantryDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: PANTRY_PIN_COLOR,
-    borderWidth: 2,
-    borderColor: "#ffffff",
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
   },
 });
