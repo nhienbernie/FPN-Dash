@@ -89,7 +89,8 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
         initialRegion={region}
         showsUserLocation
       >
-        {/* Pantry location pins — always visible, rendered first so order pins
+        {/* Pantry location pins — small dots so they don't compete visually
+            with the full-height order pins. Rendered first so order pins
             sit on top when they overlap. */}
         {pantryLocations.map((pantry) => {
           if (!pantry.coords?.latitude) return null;
@@ -102,8 +103,10 @@ const VolunteerMapView = forwardRef(function VolunteerMapView(
               coordinate={pantry.coords}
               title={pantry.name}
               description={description}
-              pinColor={PANTRY_PIN_COLOR}
-            />
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.pantryDot} />
+            </Marker>
           );
         })}
 
@@ -191,5 +194,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: theme.colors.text,
+  },
+  pantryDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: PANTRY_PIN_COLOR,
+    borderWidth: 2,
+    borderColor: "#ffffff",
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
   },
 });
