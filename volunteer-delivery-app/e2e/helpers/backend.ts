@@ -115,23 +115,66 @@ function formatAddress(address: RequesterAddress) {
 function buildOrderNotes({
   selectedItems = [],
   userNotes = "",
+  deliveryProof = null,
 }: {
   selectedItems?: string[];
   userNotes?: string;
+  deliveryProof?: { photoUri: string; capturedAt?: string } | null;
 }) {
   const cleanedItems = selectedItems
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
   const cleanedNotes = String(userNotes ?? "").trim();
+  const cleanedPhotoUri = String(deliveryProof?.photoUri ?? "").trim();
+  const cleanedCapturedAt = String(deliveryProof?.capturedAt ?? "").trim();
 
-  if (cleanedItems.length === 0) {
+  if (cleanedItems.length === 0 && !cleanedPhotoUri) {
     return cleanedNotes || null;
   }
 
-  return `${WORKAROUND_PREFIX}${JSON.stringify({
+  const payload: {
+    selectedItems: string[];
+    userNotes: string;
+    deliveryProof?: { photoUri: string; capturedAt?: string };
+  } = {
     selectedItems: cleanedItems,
     userNotes: cleanedNotes,
-  })}`;
+  };
+
+  if (cleanedPhotoUri) {
+    payload.deliveryProof = {
+      photoUri: cleanedPhotoUri,
+      ...(cleanedCapturedAt ? { capturedAt: cleanedCapturedAt } : {}),
+    };
+  }
+
+  return `${WORKAROUND_PREFIX}${JSON.stringify(payload)}`;
+}
+
+function parseOrderNotes(notes: string | null) {
+  const rawNotes = String(notes ?? "").trim();
+
+  if (!rawNotes) {
+    return { selectedItems: [], userNotes: "" };
+  }
+
+  if (!rawNotes.startsWith(WORKAROUND_PREFIX)) {
+    return { selectedItems: [], userNotes: rawNotes };
+  }
+
+  try {
+    const payload = JSON.parse(rawNotes.slice(WORKAROUND_PREFIX.length));
+    const selectedItems = Array.isArray(payload.selectedItems)
+      ? payload.selectedItems.map((item: unknown) => String(item ?? "").trim()).filter(Boolean)
+      : [];
+
+    return {
+      selectedItems,
+      userNotes: String(payload.userNotes ?? "").trim(),
+    };
+  } catch (_error) {
+    return { selectedItems: [], userNotes: rawNotes };
+  }
 }
 
 async function listAuthUsersByEmail(email: string) {
@@ -464,4 +507,50 @@ export async function createPendingOrderForRequester(
   }
 
   return data;
+}
+
+export async function markOrderDeliveredWithProof({
+  orderId,
+  volunteerEmail,
+  photoUri = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+}: {
+  orderId: number;
+  volunteerEmail: string;
+  photoUri?: string;
+}) {
+  const volunteerUid = await getVolunteerUidByEmail(volunteerEmail);
+  if (!volunteerUid) {
+    throw new Error(`Volunteer profile missing for ${volunteerEmail}.`);
+  }
+
+  const { data: order, error: readError } = await adminSupabase
+    .from("orders")
+    .select("notes")
+    .eq("order_id", orderId)
+    .eq("volunteer_uid", volunteerUid)
+    .maybeSingle();
+
+  if (readError || !order) {
+    throw new Error(readError?.message || "Unable to find accepted order.");
+  }
+
+  const existing = parseOrderNotes(order.notes);
+  const { error } = await adminSupabase
+    .from("orders")
+    .update({
+      status: "delivered",
+      notes: buildOrderNotes({
+        ...existing,
+        deliveryProof: {
+          photoUri,
+          capturedAt: new Date().toISOString(),
+        },
+      }),
+    })
+    .eq("order_id", orderId)
+    .eq("volunteer_uid", volunteerUid);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }

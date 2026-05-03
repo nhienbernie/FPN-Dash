@@ -153,6 +153,7 @@ export function parseOrderNotes(notes) {
       selectedItems: [],
       userNotes: rawNotes,
       tracking: null,
+      deliveryProof: null,
       relinquishments: [],
       isWorkaround: false,
     };
@@ -168,6 +169,7 @@ export function attachDeliveryProof(notes, photoUri) {
     deliveryProof: photoUri
       ? { photoUri, capturedAt: new Date().toISOString() }
       : null,
+    relinquishments: existing.relinquishments,
   });
 }
 

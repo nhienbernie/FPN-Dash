@@ -11,17 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-// ── Relative-time helper (for "last updated" display) ────────────────────────
-function formatRelativeTime(date) {
-  if (!date) return null;
-  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (diffSec < 5) return "just now";
-  if (diffSec < 60) return `${diffSec}s ago`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  return `${Math.floor(diffMin / 60)}h ago`;
-}
 import VolunteerMapView from "../components/VolunteerMapView";
 import AppButton from "../components/AppButton";
 import {
@@ -50,6 +39,17 @@ import { supabase } from "../services/supabase";
 import { DEMO_API_BASE_URL } from "../lib/apiConfig";
 import { ensureVolunteerProfile } from "../lib/volunteerProfile";
 import { theme } from "../theme";
+
+// ── Relative-time helper (for "last updated" display) ────────────────────────
+function formatRelativeTime(date) {
+  if (!date) return null;
+  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diffSec < 5) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  return `${Math.floor(diffMin / 60)}h ago`;
+}
 
 let didPatchExpoLocationCleanup = false;
 
@@ -174,10 +174,9 @@ export default function VolunteerDashboard() {
   const geocodeCacheRef = useRef({});
   // Tracks order_ids we have already shown; null until after the first fetch
   const seenOrderIdsRef = useRef(null);
-  // Banner auto-dismiss timer
-  const bannerTimerRef = useRef(null);
   // Ref forwarded to VolunteerMapView so we can call fitToAll imperatively
   const mapRef = useRef(null);
+  const activeOrderRef = useRef(null);
   // Banner entrance animation
   const bannerAnim = useRef(new Animated.Value(0)).current;
 
@@ -205,13 +204,6 @@ export default function VolunteerDashboard() {
   useEffect(() => {
     const id = setInterval(() => setTimeTick((t) => t + 1), 15_000);
     return () => clearInterval(id);
-  }, []);
-
-  // Clean up the banner timer on unmount
-  useEffect(() => {
-    return () => {
-      clearTimeout(bannerTimerRef.current);
-    };
   }, []);
 
   const showNewOrderBanner = useCallback(
@@ -294,8 +286,16 @@ export default function VolunteerDashboard() {
     }
   }, []);
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
+  const fetchOrders = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
+
+    const finishLoading = () => {
+      if (!silent) {
+        setLoading(false);
+      }
+    };
 
     const {
       data: { user },
@@ -304,7 +304,7 @@ export default function VolunteerDashboard() {
 
     if (userError || !user) {
       console.error("Error fetching volunteer session:", userError);
-      setLoading(false);
+      finishLoading();
       return;
     }
 
@@ -331,7 +331,7 @@ export default function VolunteerDashboard() {
       setAvailableOrders([]);
       setAvailableOrderEta({});
       setActiveOrder(null);
-      setLoading(false);
+      finishLoading();
       return;
     }
 
@@ -362,8 +362,11 @@ export default function VolunteerDashboard() {
     ]);
 
     if (pendingError || volunteerError) {
-      console.error("Error fetching orders:", pendingError || volunteerError);
-      setLoading(false);
+      console.error(
+        "Error fetching orders:",
+        pendingError || volunteerError,
+      );
+      finishLoading();
       return;
     }
 
@@ -389,28 +392,34 @@ export default function VolunteerDashboard() {
     if (!volunteerOrder) {
       setLocationSyncMessage("");
     }
-    setLoading(false);
+    finishLoading();
   }, [showNewOrderBanner]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
 
+  useEffect(() => {
+    activeOrderRef.current = activeOrder;
+  }, [activeOrder]);
+
   useOrdersFeedSubscription({
     volunteerUid: userId,
     onChange: () => {
-      fetchOrders();
+      fetchOrders({ silent: true });
     },
   });
 
   const autoLocationRef = useRef(null);
+  const activeOrderId = activeOrder?.order_id;
+  const activeOrderStatus = activeOrder?.status;
 
   useEffect(() => {
     const shouldAutoShareLocation = ACTIVE_VOLUNTEER_STATUSES.includes(
-      activeOrder?.status,
+      activeOrderStatus,
     );
 
-    if (!shouldAutoShareLocation || !activeOrder || !userId) {
+    if (!shouldAutoShareLocation || !activeOrderId || !userId) {
       if (autoLocationRef.current) {
         autoLocationRef.current.remove();
         autoLocationRef.current = null;
@@ -432,21 +441,30 @@ export default function VolunteerDashboard() {
         },
         async (position) => {
           if (cancelled) return;
+          const currentOrder = activeOrderRef.current;
+          if (
+            !currentOrder ||
+            currentOrder.order_id !== activeOrderId ||
+            currentOrder.status !== activeOrderStatus
+          ) {
+            return;
+          }
+
           const coords = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             capturedAt: new Date().toISOString(),
-            sharedForStatus: activeOrder.status,
+            sharedForStatus: currentOrder.status,
           };
-          const nextNotes = updateOrderTracking(activeOrder.notes, {
+          const nextNotes = updateOrderTracking(currentOrder.notes, {
             volunteerCoords: coords,
           });
           await supabase
             .from("orders")
             .update({ notes: nextNotes })
-            .eq("order_id", activeOrder.order_id)
+            .eq("order_id", currentOrder.order_id)
             .eq("volunteer_uid", userId)
-            .eq("status", activeOrder.status);
+            .eq("status", currentOrder.status);
           setLocationSyncMessage(
             `Location auto-updated at ${new Date().toLocaleTimeString()}.`,
           );
@@ -463,7 +481,7 @@ export default function VolunteerDashboard() {
         autoLocationRef.current = null;
       }
     };
-  }, [activeOrder?.order_id, activeOrder?.status, userId]);
+  }, [activeOrderId, activeOrderStatus, userId]);
 
   useEffect(() => {
     if (!hasVolunteerProfile || availableOrders.length === 0) {
@@ -674,6 +692,18 @@ export default function VolunteerDashboard() {
 
   const handleAdvanceActiveOrder = async (nextStatus) => {
     if (!activeOrder || !userId) return;
+
+    if (nextStatus === ORDER_STATUS.DELIVERED) {
+      router.push({
+        pathname: "/confirm-delivery",
+        params: {
+          name: activeOrder.name,
+          address: activeOrder.delivery_address,
+          order: JSON.stringify(activeOrder),
+        },
+      });
+      return;
+    }
 
     if (!canTransition(activeOrder.status, nextStatus)) {
       Alert.alert(
@@ -1013,7 +1043,7 @@ export default function VolunteerDashboard() {
               ) : null}
               {activeOrder.status === ORDER_STATUS.IN_TRANSIT ? (
                 <AppButton
-                  title="Mark Delivered"
+                  title="Add Proof & Mark Delivered"
                   onPress={() => handleAdvanceActiveOrder(ORDER_STATUS.DELIVERED)}
                   disabled={submitting}
                   style={styles.cardButton}

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Alert, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -9,20 +10,96 @@ import {
   attachDeliveryProof,
   buildRelinquishmentNotes,
   parseOrderNotes,
-  updateOrderTracking,
 } from "../lib/orderSelectionWorkaround";
+import { ACTIVE_VOLUNTEER_STATUSES, ORDER_STATUS } from "../lib/orderStatus";
 import { supabase } from "../services/supabase";
 import { theme } from "../theme";
+
+const DELIVERY_PROOF_BUCKET = "delivery-proofs";
+
+function inferImageMimeType(asset) {
+  const explicitType = String(asset?.mimeType ?? "").toLowerCase();
+  if (explicitType.startsWith("image/")) {
+    return explicitType;
+  }
+
+  const uri = String(asset?.uri ?? "").toLowerCase();
+  if (uri.includes(".png")) return "image/png";
+  if (uri.includes(".webp")) return "image/webp";
+  return "image/jpeg";
+}
+
+function getImageExtension(mimeType) {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function base64ToArrayBuffer(base64) {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+async function readPhotoAsArrayBuffer(asset, contentType) {
+  const uri = asset?.uri;
+  if (!uri) {
+    throw new Error("Missing proof photo URI.");
+  }
+
+  if (/^data:/i.test(uri)) {
+    const base64 = uri.split(",")[1] ?? "";
+    return base64ToArrayBuffer(base64);
+  }
+
+  if (/^(https?:|blob:)/i.test(uri)) {
+    const response = await fetch(uri);
+    return response.arrayBuffer();
+  }
+
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return base64ToArrayBuffer(base64);
+}
+
+async function uploadDeliveryProofPhoto({ asset, orderId, volunteerUid }) {
+  if (/^https?:/i.test(asset?.uri ?? "")) {
+    return asset.uri;
+  }
+
+  const contentType = inferImageMimeType(asset);
+  const extension = getImageExtension(contentType);
+  const safeVolunteerUid = String(volunteerUid ?? "volunteer").replace(/[^a-zA-Z0-9_-]/g, "");
+  const path = `orders/${orderId}/${safeVolunteerUid}-${Date.now()}.${extension}`;
+  const imageData = await readPhotoAsArrayBuffer(asset, contentType);
+
+  const { error: uploadError } = await supabase.storage
+    .from(DELIVERY_PROOF_BUCKET)
+    .upload(path, imageData, {
+      contentType,
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  const { data } = supabase.storage.from(DELIVERY_PROOF_BUCKET).getPublicUrl(path);
+  if (!data?.publicUrl) {
+    throw new Error("Unable to create a public delivery proof URL.");
+  }
+
+  return data.publicUrl;
+}
 
 export default function ConfirmDelivery() {
   const router = useRouter();
   const { name = "", address = "", order } = useLocalSearchParams();
-  const [modalVisible, setModalVisible] = useState(false);
-  const [cancelModalVisible, setCancelModalVisible] = useState(false);
-  const [reportModalVisible, setReportModalVisible] = useState(false);
-  const [proofPhotoUri, setProofPhotoUri] = useState(null);
-  const [pickingPhoto, setPickingPhoto] = useState(false);
-
   const [orderDetails] = useState(() => {
     if (!order) return {};
 
@@ -32,6 +109,19 @@ export default function ConfirmDelivery() {
       return {};
     }
   });
+  const [modalVisible, setModalVisible] = useState(false);
+  const [cancelModalVisible, setCancelModalVisible] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [proofPhoto, setProofPhoto] = useState(() => {
+    const existingPhotoUri = parseOrderNotes(orderDetails.notes).deliveryProof?.photoUri ?? null;
+    return existingPhotoUri ? { uri: existingPhotoUri } : null;
+  });
+  const proofPhotoUri = proofPhoto?.uri ?? null;
+  const [proofUploadMessage, setProofUploadMessage] = useState(
+    "Photo will be saved securely when you confirm delivery.",
+  );
+  const [pickingPhoto, setPickingPhoto] = useState(false);
+  const [savingDelivery, setSavingDelivery] = useState(false);
 
   const displayDate = orderDetails.delivery_date || orderDetails.created_at || "";
   const parsedNotes = parseOrderNotes(orderDetails.notes);
@@ -69,32 +159,103 @@ export default function ConfirmDelivery() {
         allowsEditing: false,
       });
       if (!result.canceled && result.assets?.length > 0) {
-        setProofPhotoUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setProofPhoto({
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+          fileName: asset.fileName,
+        });
+        setProofUploadMessage("Photo ready. It will be uploaded when delivery is confirmed.");
       }
     } catch (err) {
       console.warn("[proof] Camera failed:", err.message);
+      Alert.alert(
+        "Camera unavailable",
+        "We could not open the camera. Please try again before confirming delivery.",
+      );
     } finally {
       setPickingPhoto(false);
     }
   };
 
-  const handleConfirmDelivery = async () => {
-    if (!orderDetails.order_id) return;
-
-    const updatedNotes = attachDeliveryProof(orderDetails.notes, proofPhotoUri ?? null);
-
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "delivered", notes: updatedNotes })
-      .eq("order_id", orderDetails.order_id);
-
-    if (error) {
-      console.error("Error updating order:", error);
+  const handleOpenConfirmDelivery = () => {
+    if (!proofPhotoUri) {
+      Alert.alert(
+        "Proof photo required",
+        "Take a delivery proof photo before marking this order delivered.",
+      );
       return;
     }
 
-    setModalVisible(false);
-    router.push("/volunteer-dashboard");
+    setModalVisible(true);
+  };
+
+  const handleConfirmDelivery = async () => {
+    if (!orderDetails.order_id) return;
+    if (!proofPhotoUri) {
+      Alert.alert(
+        "Proof photo required",
+        "Take a delivery proof photo before marking this order delivered.",
+      );
+      return;
+    }
+
+    setSavingDelivery(true);
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        Alert.alert("Session expired", "Sign in again before confirming delivery.");
+        return;
+      }
+
+      setProofUploadMessage("Uploading proof photo...");
+      const proofPhotoUrl = await uploadDeliveryProofPhoto({
+        asset: proofPhoto,
+        orderId: orderDetails.order_id,
+        volunteerUid: user.id,
+      });
+      const updatedNotes = attachDeliveryProof(orderDetails.notes, proofPhotoUrl);
+
+      const { data, error } = await supabase
+        .from("orders")
+        .update({ status: ORDER_STATUS.DELIVERED, notes: updatedNotes })
+        .eq("order_id", orderDetails.order_id)
+        .eq("volunteer_uid", user.id)
+        .in("status", ACTIVE_VOLUNTEER_STATUSES)
+        .select("order_id")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error updating order:", error);
+        Alert.alert("Error", "Unable to confirm this delivery right now.");
+        return;
+      }
+
+      if (!data) {
+        Alert.alert(
+          "Order Changed",
+          "This delivery changed in another session. Refreshing your dashboard.",
+        );
+        router.replace("/volunteer-dashboard");
+        return;
+      }
+
+      setModalVisible(false);
+      router.replace("/volunteer-dashboard");
+    } catch (error) {
+      console.error("Error saving delivery proof:", error);
+      Alert.alert(
+        "Proof upload failed",
+        error.message || "Unable to save the delivery proof photo right now.",
+      );
+    } finally {
+      setSavingDelivery(false);
+    }
   };
 
   const handleCancelDelivery = async () => {
@@ -140,7 +301,10 @@ export default function ConfirmDelivery() {
         </Text>
 
         <View style={styles.proofSection}>
-          <Text style={styles.proofLabel}>Delivery proof (optional)</Text>
+          <Text style={styles.proofLabel}>Delivery proof required</Text>
+          <Text style={styles.proofHint}>
+            {proofUploadMessage}
+          </Text>
           {proofPhotoUri ? (
             <View style={styles.proofPreviewContainer}>
               <Image source={{ uri: proofPhotoUri }} style={styles.proofPreview} />
@@ -164,8 +328,9 @@ export default function ConfirmDelivery() {
         </View>
 
         <AppButton
-          title="Confirm Delivery"
-          onPress={() => setModalVisible(true)}
+          title={savingDelivery ? "Confirming..." : "Confirm Delivery"}
+          onPress={handleOpenConfirmDelivery}
+          disabled={!proofPhotoUri || savingDelivery}
           style={{ marginTop: theme.spacing.md }}
           testID="confirm-delivery-open-confirm"
         />
@@ -209,8 +374,9 @@ export default function ConfirmDelivery() {
             </Text>
             <View style={styles.modalButtons}>
               <AppButton
-                title="Yes"
+                title={savingDelivery ? "Saving..." : "Yes"}
                 onPress={handleConfirmDelivery}
+                disabled={savingDelivery}
                 style={{ marginRight: theme.spacing.sm }}
                 testID="confirm-delivery-confirm-yes"
               />
@@ -345,11 +511,17 @@ const styles = StyleSheet.create({
   proofLabel: {
     fontSize: 13,
     fontWeight: "700",
-    color: theme.colors.mutedText,
+    color: theme.colors.text,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: theme.spacing.sm,
     textAlign: "center",
+  },
+  proofHint: {
+    fontSize: 14,
+    color: theme.colors.mutedText,
+    textAlign: "center",
+    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
   proofButton: {
     width: "100%",

@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Image, Linking, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import AppButton from "../components/AppButton";
 import ReportConcernModal from "../components/ReportConcernModal";
 import {
@@ -196,6 +196,7 @@ export default function OrderStatus() {
   );
   const parsedNotes = useMemo(() => parseOrderNotes(order?.notes), [order?.notes]);
   const volunteerCoords = parsedNotes.tracking?.volunteerCoords ?? null;
+  const deliveryProof = parsedNotes.deliveryProof;
   const orderTime = order?.created_at
     ? new Date(order.created_at)
     : null;
@@ -318,6 +319,18 @@ export default function OrderStatus() {
         </Text>
         <Text style={styles.statusDescription}>{statusMeta.description}</Text>
         <OrderProgress status={order.status} />
+
+        {order.status === ORDER_STATUS.DELIVERED && deliveryProof?.photoUri ? (
+          <View style={styles.detailSection} testID="order-status-delivery-proof">
+            <Text style={styles.detailSectionTitle}>Delivery Proof</Text>
+            {deliveryProof.capturedAt ? (
+              <Text style={styles.detailText}>
+                Photo captured: {new Date(deliveryProof.capturedAt).toLocaleString()}
+              </Text>
+            ) : null}
+            <Image source={{ uri: deliveryProof.photoUri }} style={styles.proofImage} />
+          </View>
+        ) : null}
 
         {deliveryEstimate.state !== "delivered" ? (
           <View style={styles.detailSection}>
@@ -605,6 +618,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: theme.colors.text,
     lineHeight: 22,
+  },
+  proofImage: {
+    width: "100%",
+    height: 180,
+    borderRadius: theme.radius.md,
+    resizeMode: "cover",
+    backgroundColor: theme.colors.surfaceMuted,
+    marginTop: theme.spacing.sm,
   },
   button: {
     width: "100%",

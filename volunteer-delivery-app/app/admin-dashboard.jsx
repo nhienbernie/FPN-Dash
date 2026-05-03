@@ -48,33 +48,27 @@ const ADMIN_AUTH_STORAGE_KEY = "admin-dashboard-authenticated";
 const TAB_COPY = {
   menu: {
     title: "Menu setup",
-    subtitle:
-      "Manage the global requester menu by editing sections and the items inside them.",
+    subtitle: "Requester-facing menu sections and available items.",
   },
   pantries: {
     title: "Pantry locations",
-    subtitle:
-      "Add, edit, and deactivate drive-thru distribution sites shown on the volunteer map.",
+    subtitle: "Distribution sites shown on the volunteer map.",
   },
   cancellations: {
     title: "Order cancellations",
-    subtitle:
-      "Remove orders that should not continue and clear the queue for the team.",
+    subtitle: "Pending and accepted orders flagged for removal.",
   },
   complaints: {
     title: "Complaint handling",
-    subtitle:
-      "Triage safety and service complaints with a clearer review flow.",
+    subtitle: "Open reports from requesters and volunteers.",
   },
   analytics: {
     title: "Analytics",
-    subtitle:
-      "Order volume, status breakdown, daily trends, and volunteer reliability scores.",
+    subtitle: "Order volume, status mix, daily trends, and volunteer activity.",
   },
   history: {
     title: "Order history",
-    subtitle:
-      "Browse all past orders with optional date filtering and CSV export.",
+    subtitle: "Order records with date filters and CSV export.",
   },
 };
 
@@ -540,7 +534,7 @@ export default function AdminDashboard() {
         const firstItemLabel = sectionEditor.firstItemLabel.trim();
 
         if (!firstItemLabel) {
-          throw new Error("A new section needs its first item label.");
+          throw new Error("Add one item label to create a section.");
         }
 
         const { error } = await supabase.from("items").insert({
@@ -907,19 +901,19 @@ export default function AdminDashboard() {
           </View>
         </View>
 
-        <Text style={styles.queueLabel}>Current requester view</Text>
+        <Text style={styles.queueLabel}>Requester view</Text>
         <Text style={styles.queueValue}>{previewText}</Text>
 
-        <Text style={styles.queueLabel}>Admin note</Text>
+        <Text style={styles.queueLabel}>Visibility</Text>
         <Text style={styles.queueValue}>
           {section.isVisible
-            ? "Requesters can see this section as long as it still has live items."
-            : "This section is hidden right now. Restore one or more items to bring it back."}
+            ? "Shown while at least one item is live."
+            : "Hidden until an item is restored."}
         </Text>
 
         <View style={styles.actionRow}>
           <AppButton
-            title="Manage Section"
+            title="Edit Section"
             onPress={() => openManageSection(section)}
             style={styles.inlineAction}
           />
@@ -1087,7 +1081,7 @@ export default function AdminDashboard() {
           </View>
         </View>
 
-        <Text style={styles.queueLabel}>Complaint routing</Text>
+        <Text style={styles.queueLabel}>Case note</Text>
         <Text style={styles.queueValue}>{reasonMeta.queueSummary}</Text>
 
         <Text style={styles.queueLabel}>Who is involved</Text>
@@ -1105,7 +1099,7 @@ export default function AdminDashboard() {
 
         <View style={styles.actionRow}>
           <AppButton
-            title="Review Case"
+            title="View Case"
             onPress={() => setFocusedComplaint(report)}
             style={styles.inlineAction}
           />
@@ -1310,9 +1304,8 @@ export default function AdminDashboard() {
             />
           </View>
           <Text style={styles.menuHelperText}>
-            This first pass uses the existing items table. New sections need a first
-            item, and hiding is safer than hard-deleting because old orders may still
-            reference these menu items.
+            Sections are based on item categories. Hiding keeps older orders
+            readable while removing items from the requester menu.
           </Text>
           {menuSections.length === 0 ? (
             <Text style={styles.emptyText}>
@@ -1359,7 +1352,7 @@ export default function AdminDashboard() {
       if (cancellationQueue.length === 0) {
         return (
           <Text style={styles.emptyText}>
-            No pending or accepted orders are waiting on cancellation.
+            No pending or accepted orders are flagged for cancellation.
           </Text>
         );
       }
@@ -1408,9 +1401,9 @@ export default function AdminDashboard() {
       <View style={styles.authShell}>
         <View style={styles.authCard}>
           <Text style={styles.eyebrow}>Admin Access</Text>
-          <Text style={styles.title}>Checking saved admin session...</Text>
+          <Text style={styles.title}>Checking admin session...</Text>
           <Text style={styles.subtitle}>
-            Hold on while the dashboard verifies whether this device is already signed in.
+            Looking for a saved sign-in on this device.
           </Text>
         </View>
       </View>
@@ -1425,10 +1418,9 @@ export default function AdminDashboard() {
       >
         <View style={styles.authCard}>
           <Text style={styles.eyebrow}>Admin Access</Text>
-          <Text style={styles.title}>Sign in to the pantry dashboard.</Text>
+          <Text style={styles.title}>Pantry dashboard sign-in</Text>
           <Text style={styles.subtitle}>
-            Sign in with pantry administrator credentials to review requests,
-            coordinate deliveries, and manage reported issues.
+            Use your administrator credentials to open queue, menu, and report tools.
           </Text>
 
           <Text style={styles.inputLabel}>Username</Text>
@@ -1510,11 +1502,10 @@ export default function AdminDashboard() {
       >
         <View style={styles.hero}>
           <View style={styles.heroCopy}>
-            <Text style={styles.eyebrow}>Admin Triage</Text>
-            <Text style={styles.title}>Focus the dashboard on decisions.</Text>
+            <Text style={styles.eyebrow}>Pantry Admin</Text>
+            <Text style={styles.title}>Operations dashboard</Text>
             <Text style={styles.subtitle}>
-              Prioritize menu setup, cancellations, and complaint handling before
-              anything else.
+              Menu availability, open issues, delivery queue, and recent activity.
             </Text>
             <View style={styles.heroNote}>
               <Text style={styles.heroNoteText}>{queueHeadline}</Text>
@@ -1620,14 +1611,14 @@ export default function AdminDashboard() {
                           : "Rename item"
                         : sectionEditor.mode === "create"
                           ? "Create menu section"
-                          : "Manage section"}
+                          : "Edit section"}
                     </Text>
                     <Text style={styles.modalSubtitle}>
                       {itemEditor
                         ? itemEditor.sectionName
                         : sectionEditor.mode === "create"
-                          ? "Add a new section and its first requester-visible item."
-                          : `Section currently saved as ${sectionEditor.originalName}.`}
+                          ? "Start a section with one visible item."
+                          : `Saved as ${sectionEditor.originalName}.`}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -1703,8 +1694,8 @@ export default function AdminDashboard() {
                       {sectionEditor.mode === "create" ? (
                         <>
                           <Text style={styles.menuHelperText}>
-                            Sections are discovered from the items table today, so a new
-                            section needs its first item right away.
+                            Sections come from item categories, so the first item
+                            creates the section.
                           </Text>
                           <Text style={styles.inputLabel}>First item label</Text>
                           <TextInput
@@ -1899,7 +1890,7 @@ export default function AdminDashboard() {
                     {focusedComplaint.reported_role}
                   </Text>
 
-                  <Text style={styles.queueLabel}>Recommended handling</Text>
+                  <Text style={styles.queueLabel}>Handling note</Text>
                   <Text style={styles.queueValue}>
                     {focusedComplaintMeta.queueSummary}
                   </Text>

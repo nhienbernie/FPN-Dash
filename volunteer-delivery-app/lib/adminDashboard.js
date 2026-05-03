@@ -30,7 +30,7 @@ const REPORT_REASON_META = {
   harassment: {
     label: "Harassment",
     severity: "High",
-    queueSummary: "Review context and consider escalation.",
+    queueSummary: "Context review with escalation path.",
     backgroundColor: "#FFF7ED",
     borderColor: "#FDBA74",
     accentColor: "#C2410C",
@@ -38,7 +38,7 @@ const REPORT_REASON_META = {
   no_show: {
     label: "No show",
     severity: "Medium",
-    queueSummary: "Check delivery timeline and assignment history.",
+    queueSummary: "Delivery timeline and assignment history.",
     backgroundColor: "#FFFBEB",
     borderColor: "#FDE68A",
     accentColor: "#A16207",
@@ -46,7 +46,7 @@ const REPORT_REASON_META = {
   other: {
     label: "Other",
     severity: "Medium",
-    queueSummary: "Needs manual triage.",
+    queueSummary: "Manual review.",
     backgroundColor: "#EFF6FF",
     borderColor: "#BFDBFE",
     accentColor: "#1D4ED8",
@@ -104,7 +104,7 @@ export function getReportReasonMeta(reason) {
     REPORT_REASON_META[normalized] || {
       label: normalized ? normalized.replace(/_/g, " ") : "Concern",
       severity: "Medium",
-      queueSummary: "Needs manual triage.",
+      queueSummary: "Manual review.",
       backgroundColor: "#F8FAFC",
       borderColor: theme.colors.border,
       accentColor: theme.colors.text,
@@ -328,22 +328,22 @@ export function buildQueueHeadline(metrics) {
   const liveSections = getMetricValue(metrics, "liveSections");
 
   if (urgentComplaints > 0) {
-    return `${urgentComplaints} urgent complaint${urgentComplaints === 1 ? "" : "s"} need attention.`;
+    return `${urgentComplaints} urgent complaint${urgentComplaints === 1 ? "" : "s"} waiting.`;
   }
 
   if (hiddenSections > 0) {
-    return `${hiddenSections} menu section${hiddenSections === 1 ? "" : "s"} are hidden from requesters right now.`;
+    return `${hiddenSections} menu section${hiddenSections === 1 ? "" : "s"} hidden from requesters.`;
   }
 
   if (cancellations > 0) {
-    return `${cancellations} order cancellation${cancellations === 1 ? "" : "s"} can be cleared next.`;
+    return `${cancellations} order cancellation${cancellations === 1 ? "" : "s"} in queue.`;
   }
 
   if (liveSections > 0) {
-    return `${liveSections} menu section${liveSections === 1 ? "" : "s"} are currently available to requesters.`;
+    return `${liveSections} menu section${liveSections === 1 ? "" : "s"} live for requesters.`;
   }
 
-  return "No urgent admin actions are waiting right now.";
+  return "No urgent admin work right now.";
 }
 
 export function getOrderStatusBadge(order) {

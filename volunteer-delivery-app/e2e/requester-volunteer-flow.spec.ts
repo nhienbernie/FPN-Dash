@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   createPendingOrderForRequester,
+  markOrderDeliveredWithProof,
   resetTestState,
   type RequesterSeed,
   waitForLatestRequesterOrder,
@@ -250,11 +251,20 @@ test.describe("requester and volunteer e2e flows", () => {
       );
 
       await volunteerPage.getByTestId("volunteer-dashboard-mark-delivered").click();
+      await expect(volunteerPage).toHaveURL(/\/confirm-delivery/);
+      await expect(volunteerPage.getByText("Delivery proof required")).toBeVisible();
+      await expect(volunteerPage.getByTestId("confirm-delivery-open-confirm")).toBeDisabled();
+
+      await markOrderDeliveredWithProof({
+        orderId: createdOrder.order_id,
+        volunteerEmail: VOLUNTEER.email,
+      });
 
       await requesterPage.getByTestId("order-status-refresh").click();
       await expect(requesterPage.getByTestId("order-status-current-status")).toContainText(
         "Delivered",
       );
+      await expect(requesterPage.getByTestId("order-status-delivery-proof")).toBeVisible();
 
       const orderAgainButton = requesterPage.getByTestId("order-status-order-again");
       await expect(orderAgainButton).toBeEnabled();
