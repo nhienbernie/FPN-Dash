@@ -7,6 +7,7 @@ import AppButton from "../components/AppButton";
 import ReportConcernModal from "../components/ReportConcernModal";
 import {
   attachDeliveryProof,
+  buildRelinquishmentNotes,
   parseOrderNotes,
   updateOrderTracking,
 } from "../lib/orderSelectionWorkaround";
@@ -99,9 +100,10 @@ export default function ConfirmDelivery() {
   const handleCancelDelivery = async () => {
     if (!orderDetails.order_id) return;
 
-    const nextNotes = updateOrderTracking(orderDetails.notes, {
-      volunteerCoords: null,
-    });
+    const nextNotes = buildRelinquishmentNotes(
+      orderDetails.notes,
+      orderDetails.volunteer_uid,
+    );
 
     const { error } = await supabase
       .from("orders")
