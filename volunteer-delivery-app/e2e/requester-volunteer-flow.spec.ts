@@ -253,7 +253,10 @@ test.describe("requester and volunteer e2e flows", () => {
       await volunteerPage.getByTestId("volunteer-dashboard-mark-delivered").click();
       await expect(volunteerPage).toHaveURL(/\/confirm-delivery/);
       await expect(volunteerPage.getByText("Delivery proof required")).toBeVisible();
-      await expect(volunteerPage.getByTestId("confirm-delivery-open-confirm")).toBeDisabled();
+      await expect(volunteerPage.getByTestId("confirm-delivery-open-confirm")).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
 
       await markOrderDeliveredWithProof({
         orderId: createdOrder.order_id,
