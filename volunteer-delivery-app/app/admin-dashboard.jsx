@@ -937,7 +937,7 @@ export default function AdminDashboard() {
       <Text style={styles.queueLabel}>Address</Text>
       <Text style={styles.queueValue}>{pantry.address}</Text>
 
-      <View style={styles.actionRow}>
+      <View style={styles.pantryActionRow}>
         <AppButton
           title="Edit"
           onPress={() => openEditPantry(pantry)}
@@ -2092,13 +2092,20 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   heroActions: {
-    flexDirection: "row",
+    flexDirection: "column",
     flexWrap: "wrap",
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   heroButton: {
     flex: 1,
+    width: "100%",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
+  
   eyebrow: {
     color: theme.colors.primary,
     fontSize: 13,
@@ -2173,24 +2180,28 @@ const styles = StyleSheet.create({
   segmentedControl: {
     flexDirection: "row",
     gap: theme.spacing.sm,
+    flexWrap: "wrap",
     marginBottom: theme.spacing.lg,
   },
   segmentButton: {
-    flex: 1,
-    paddingVertical: theme.spacing.md,
+    width: "47%",
+    //flex: 1,
+    paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.sm,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.surface,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 36,
   },
   segmentButtonActive: {
     backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: theme.colors.text,
     textAlign: "center",
@@ -2302,6 +2313,14 @@ const styles = StyleSheet.create({
   },
   inlineAction: {
     flex: 1,
+    shadowCOlor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    elevation: 2,
   },
   emptyText: {
     fontSize: 15,
@@ -2534,4 +2553,16 @@ const styles = StyleSheet.create({
   mutedPlaceholder: {
     color: theme.colors.mutedText,
   },
+
+  pantryActionRow: {
+    flexDirection: "column",
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
 });
+
