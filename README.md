@@ -1,6 +1,6 @@
-# CS349 Volunteer Delivery
+# FPN Dash
 
-CS349 Volunteer Delivery helps food pantries coordinate grocery deliveries.
+FPN Dash helps food pantries coordinate grocery deliveries.
 
 The app supports three roles:
 
