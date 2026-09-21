@@ -1,6 +1,6 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -330,9 +330,12 @@ export default function AdminDashboard() {
   const metricCards = useMemo(
     () =>
       metrics.filter((metric) =>
-        ["liveSections", "liveItems", "cancellations", "openComplaints"].includes(
-          metric.key,
-        ),
+        [
+          "liveSections",
+          "liveItems",
+          "cancellations",
+          "openComplaints",
+        ].includes(metric.key),
       ),
     [metrics],
   );
@@ -345,7 +348,10 @@ export default function AdminDashboard() {
   );
 
   const ordersById = useMemo(
-    () => Object.fromEntries(dashboardData.orders.map((order) => [order.order_id, order])),
+    () =>
+      Object.fromEntries(
+        dashboardData.orders.map((order) => [order.order_id, order]),
+      ),
     [dashboardData.orders],
   );
 
@@ -358,7 +364,8 @@ export default function AdminDashboard() {
   );
 
   const volunteerStats = useMemo(
-    () => buildVolunteerStats(dashboardData.orders, dashboardData.volunteersById),
+    () =>
+      buildVolunteerStats(dashboardData.orders, dashboardData.volunteersById),
     [dashboardData.orders, dashboardData.volunteersById],
   );
 
@@ -417,7 +424,9 @@ export default function AdminDashboard() {
     }
 
     return (
-      menuSections.find((section) => section.name === sectionEditor.originalName) || null
+      menuSections.find(
+        (section) => section.name === sectionEditor.originalName,
+      ) || null
     );
   }, [menuSections, sectionEditor]);
 
@@ -513,7 +522,10 @@ export default function AdminDashboard() {
     }
 
     const isDuplicate = menuSections.some((section) => {
-      if (sectionEditor.mode === "manage" && section.name === sectionEditor.originalName) {
+      if (
+        sectionEditor.mode === "manage" &&
+        section.name === sectionEditor.originalName
+      ) {
         return false;
       }
 
@@ -656,14 +668,23 @@ export default function AdminDashboard() {
       await loadDashboard({ silent: true });
     } catch (error) {
       console.error("Error cancelling order:", error);
-      Alert.alert("Order Cancellation Failed", error.message || "Please try again.");
+      Alert.alert(
+        "Order Cancellation Failed",
+        error.message || "Please try again.",
+      );
     } finally {
       setBusyKey("");
     }
   };
 
   const openCreatePantry = () => {
-    setPantryEditor({ mode: "create", id: null, name: "", address: "", hours: "" });
+    setPantryEditor({
+      mode: "create",
+      id: null,
+      name: "",
+      address: "",
+      hours: "",
+    });
   };
 
   const openEditPantry = (pantry) => {
@@ -720,7 +741,10 @@ export default function AdminDashboard() {
       await loadDashboard({ silent: true });
     } catch (error) {
       console.error("Error saving pantry:", error);
-      Alert.alert("Unable to Save Pantry", error.message || "Please try again.");
+      Alert.alert(
+        "Unable to Save Pantry",
+        error.message || "Please try again.",
+      );
     } finally {
       setBusyKey("");
     }
@@ -763,13 +787,26 @@ export default function AdminDashboard() {
       await loadDashboard({ silent: true });
     } catch (error) {
       console.error("Error deleting pantry:", error);
-      Alert.alert("Unable to Delete Pantry", error.message || "Please try again.");
+      Alert.alert(
+        "Unable to Delete Pantry",
+        error.message || "Please try again.",
+      );
     } finally {
       setBusyKey("");
     }
   };
 
   const handleDeletePantry = (pantry) => {
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Delete this pantry? ${pantry.name} will be removed from the volunteer map permanently.`,
+      );
+      if (confirmed) {
+        void performDeletePantry(pantry);
+      }
+      return;
+    }
+
     Alert.alert(
       "Delete this pantry?",
       `${pantry.name} will be removed from the volunteer map permanently.`,
@@ -792,6 +829,16 @@ export default function AdminDashboard() {
     const detail = volunteerLabel
       ? `This also clears the assignment for ${volunteerLabel}.`
       : "This removes the order from the active queue.";
+
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm(
+        `Cancel this order? ${customerLabel}'s order will be removed.\n\n${detail}`,
+      );
+      if (confirmed) {
+        void performCancelOrder(order);
+      }
+      return;
+    }
 
     Alert.alert(
       "Cancel this order?",
@@ -817,10 +864,10 @@ export default function AdminDashboard() {
 
     try {
       const { data, error } = await supabase
-      .from("reports")
-      .update({ status: nextStatus })
-      .eq("report_id", report.report_id)
-      .select("report_id, status");
+        .from("reports")
+        .update({ status: nextStatus })
+        .eq("report_id", report.report_id)
+        .select("report_id, status");
 
       if (error) {
         throw error;
@@ -853,7 +900,10 @@ export default function AdminDashboard() {
       await loadDashboard({ silent: true });
     } catch (error) {
       console.error("Error updating report status:", error);
-      Alert.alert("Complaint Update Failed", error.message || "Please try again.");
+      Alert.alert(
+        "Complaint Update Failed",
+        error.message || "Please try again.",
+      );
     } finally {
       setBusyKey("");
     }
@@ -913,7 +963,9 @@ export default function AdminDashboard() {
           <AppButton
             title={section.isVisible ? "Hide Section" : "Restore All"}
             variant="ghost"
-            onPress={() => performSectionVisibilityUpdate(section, !section.isVisible)}
+            onPress={() =>
+              performSectionVisibilityUpdate(section, !section.isVisible)
+            }
             disabled={busyKey === `section-toggle-${section.name}`}
             style={styles.inlineAction}
           />
@@ -927,10 +979,19 @@ export default function AdminDashboard() {
       <View style={styles.queueCardHeader}>
         <View style={styles.queueCardTitleBlock}>
           <Text style={styles.queueCardTitle}>{pantry.name}</Text>
-          <Text style={styles.queueCardMeta}>{pantry.hours || "Hours not set"}</Text>
+          <Text style={styles.queueCardMeta}>
+            {pantry.hours || "Hours not set"}
+          </Text>
         </View>
-        <View style={[styles.badge, pantry.active ? styles.badgeVisible : styles.badgeMuted]}>
-          <Text style={styles.badgeText}>{pantry.active ? "Active" : "Inactive"}</Text>
+        <View
+          style={[
+            styles.badge,
+            pantry.active ? styles.badgeVisible : styles.badgeMuted,
+          ]}
+        >
+          <Text style={styles.badgeText}>
+            {pantry.active ? "Active" : "Inactive"}
+          </Text>
         </View>
       </View>
 
@@ -1040,7 +1101,10 @@ export default function AdminDashboard() {
       : `Order #${report.order_id}`;
 
     return (
-      <View key={`${report.order_id}-${report.created_at}`} style={styles.queueCard}>
+      <View
+        key={`${report.order_id}-${report.created_at}`}
+        style={styles.queueCard}
+      >
         <View style={styles.queueCardHeader}>
           <View style={styles.queueCardTitleBlock}>
             <Text style={styles.queueCardTitle}>{reasonMeta.label}</Text>
@@ -1083,7 +1147,9 @@ export default function AdminDashboard() {
         </Text>
 
         <Text style={styles.queueLabel}>Submitted</Text>
-        <Text style={styles.queueValue}>{formatTimestamp(report.created_at)}</Text>
+        <Text style={styles.queueValue}>
+          {formatTimestamp(report.created_at)}
+        </Text>
 
         <Text style={styles.queueLabel}>Details</Text>
         <Text style={styles.queueValue}>
@@ -1137,7 +1203,8 @@ export default function AdminDashboard() {
       <>
         <Text style={styles.analyticsSectionTitle}>Order Status Breakdown</Text>
         {Object.entries(ordersByStatus).map(([status, count]) => {
-          const pct = totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0;
+          const pct =
+            totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0;
           return (
             <View key={status} style={styles.statRow}>
               <Text style={styles.statLabel}>{status.replace(/_/g, " ")}</Text>
@@ -1149,11 +1216,14 @@ export default function AdminDashboard() {
           );
         })}
 
-        <Text style={[styles.analyticsSectionTitle, styles.analyticsSectionSpacing]}>
+        <Text
+          style={[styles.analyticsSectionTitle, styles.analyticsSectionSpacing]}
+        >
           Orders per Day (last 7 days)
         </Text>
         {ordersPerDay.map((day) => {
-          const barPct = maxPerDay > 0 ? Math.round((day.count / maxPerDay) * 100) : 0;
+          const barPct =
+            maxPerDay > 0 ? Math.round((day.count / maxPerDay) * 100) : 0;
           return (
             <View key={day.label} style={styles.statRow}>
               <Text style={styles.statLabel}>{day.label}</Text>
@@ -1170,7 +1240,9 @@ export default function AdminDashboard() {
           );
         })}
 
-        <Text style={[styles.analyticsSectionTitle, styles.analyticsSectionSpacing]}>
+        <Text
+          style={[styles.analyticsSectionTitle, styles.analyticsSectionSpacing]}
+        >
           Volunteer Reliability
         </Text>
         {volunteerStats.length === 0 ? (
@@ -1234,11 +1306,16 @@ export default function AdminDashboard() {
         />
 
         {filteredHistoryOrders.length === 0 ? (
-          <Text style={[styles.emptyText, { marginTop: 12 }]}>No orders match this date range.</Text>
+          <Text style={[styles.emptyText, { marginTop: 12 }]}>
+            No orders match this date range.
+          </Text>
         ) : (
           filteredHistoryOrders.map((order) => {
             const statusMeta = getOrderStatusBadge(order);
-            const customerLabel = getCustomerLabel(order, dashboardData.customersById);
+            const customerLabel = getCustomerLabel(
+              order,
+              dashboardData.customersById,
+            );
             const volunteerLabel = order.volunteer_uid
               ? dashboardData.volunteersById[order.volunteer_uid]
               : null;
@@ -1265,7 +1342,9 @@ export default function AdminDashboard() {
                   </View>
                 </View>
                 <Text style={styles.queueLabel}>Address</Text>
-                <Text style={styles.queueValue}>{buildAddressSummary(order.delivery_address)}</Text>
+                <Text style={styles.queueValue}>
+                  {buildAddressSummary(order.delivery_address)}
+                </Text>
                 {volunteerLabel ? (
                   <>
                     <Text style={styles.queueLabel}>Volunteer</Text>
@@ -1313,7 +1392,9 @@ export default function AdminDashboard() {
 
     if (activeTab === "pantries") {
       if (loading) {
-        return <Text style={styles.emptyText}>Loading pantry locations...</Text>;
+        return (
+          <Text style={styles.emptyText}>Loading pantry locations...</Text>
+        );
       }
 
       return (
@@ -1339,7 +1420,9 @@ export default function AdminDashboard() {
 
     if (activeTab === "cancellations") {
       if (loading) {
-        return <Text style={styles.emptyText}>Loading cancellable orders...</Text>;
+        return (
+          <Text style={styles.emptyText}>Loading cancellable orders...</Text>
+        );
       }
 
       if (cancellationQueue.length === 0) {
@@ -1413,7 +1496,8 @@ export default function AdminDashboard() {
           <Text style={styles.eyebrow}>Admin Access</Text>
           <Text style={styles.title}>Pantry dashboard sign-in</Text>
           <Text style={styles.subtitle}>
-            Use your administrator credentials to open queue, menu, and report tools.
+            Use your administrator credentials to open queue, menu, and report
+            tools.
           </Text>
 
           <Text style={styles.inputLabel}>Username</Text>
@@ -1437,7 +1521,9 @@ export default function AdminDashboard() {
             returnKeyType="next"
           />
 
-          <Text style={[styles.inputLabel, styles.authPasswordLabel]}>Password</Text>
+          <Text style={[styles.inputLabel, styles.authPasswordLabel]}>
+            Password
+          </Text>
           <TextInput
             style={styles.textInput}
             placeholder="password"
@@ -1461,7 +1547,9 @@ export default function AdminDashboard() {
             }}
           />
 
-          {loginError ? <Text style={styles.authErrorText}>{loginError}</Text> : null}
+          {loginError ? (
+            <Text style={styles.authErrorText}>{loginError}</Text>
+          ) : null}
 
           <View style={styles.authActions}>
             <AppButton
@@ -1498,13 +1586,17 @@ export default function AdminDashboard() {
             <Text style={styles.eyebrow}>Pantry Admin</Text>
             <Text style={styles.title}>Operations dashboard</Text>
             <Text style={styles.subtitle}>
-              Menu availability, open issues, delivery queue, and recent activity.
+              Menu availability, open issues, delivery queue, and recent
+              activity.
             </Text>
             <View style={styles.heroNote}>
               <Text style={styles.heroNoteText}>{queueHeadline}</Text>
             </View>
             <Text style={styles.lastUpdatedText}>
-              Last refreshed {lastRefreshedAt ? formatElapsedSince(lastRefreshedAt) : "just now"}
+              Last refreshed{" "}
+              {lastRefreshedAt
+                ? formatElapsedSince(lastRefreshedAt)
+                : "just now"}
             </Text>
           </View>
           <View style={styles.heroActions}>
@@ -1537,10 +1629,7 @@ export default function AdminDashboard() {
           {metricCards.map((card) => (
             <View key={card.key} style={styles.metricCard}>
               <View
-                style={[
-                  styles.metricAccent,
-                  { backgroundColor: card.accent },
-                ]}
+                style={[styles.metricAccent, { backgroundColor: card.accent }]}
               />
               <Text style={styles.metricValue}>{card.value}</Text>
               <Text style={styles.metricLabel}>{card.label}</Text>
@@ -1648,7 +1737,11 @@ export default function AdminDashboard() {
 
                       <View style={styles.modalActions}>
                         <AppButton
-                          title={itemEditor.mode === "create" ? "Add Item" : "Save Item"}
+                          title={
+                            itemEditor.mode === "create"
+                              ? "Add Item"
+                              : "Save Item"
+                          }
                           onPress={handleSaveItem}
                           disabled={busyKey === "item-save"}
                           style={styles.modalActionButton}
@@ -1687,10 +1780,12 @@ export default function AdminDashboard() {
                       {sectionEditor.mode === "create" ? (
                         <>
                           <Text style={styles.menuHelperText}>
-                            Sections come from item categories, so the first item
-                            creates the section.
+                            Sections come from item categories, so the first
+                            item creates the section.
                           </Text>
-                          <Text style={styles.inputLabel}>First item label</Text>
+                          <Text style={styles.inputLabel}>
+                            First item label
+                          </Text>
                           <TextInput
                             style={styles.textInput}
                             placeholder="Protein shake"
@@ -1711,7 +1806,9 @@ export default function AdminDashboard() {
                       ) : currentSection ? (
                         <>
                           <View style={styles.sectionSummaryCard}>
-                            <Text style={styles.queueLabel}>Section status</Text>
+                            <Text style={styles.queueLabel}>
+                              Section status
+                            </Text>
                             <Text style={styles.queueValue}>
                               {currentSection.isVisible
                                 ? `${currentSection.activeItemCount} live item${currentSection.activeItemCount === 1 ? "" : "s"} visible to requesters.`
@@ -1720,7 +1817,10 @@ export default function AdminDashboard() {
                             <Text style={styles.queueLabel}>Hidden items</Text>
                             <Text style={styles.queueValue}>
                               {currentSection.inactiveItemCount} hidden item
-                              {currentSection.inactiveItemCount === 1 ? "" : "s"}.
+                              {currentSection.inactiveItemCount === 1
+                                ? ""
+                                : "s"}
+                              .
                             </Text>
                           </View>
 
@@ -1728,11 +1828,17 @@ export default function AdminDashboard() {
                             <AppButton
                               title="Add Item"
                               variant="secondary"
-                              onPress={() => openCreateItem(currentSection.name)}
+                              onPress={() =>
+                                openCreateItem(currentSection.name)
+                              }
                               style={styles.inlineAction}
                             />
                             <AppButton
-                              title={currentSection.isVisible ? "Hide Section" : "Restore All"}
+                              title={
+                                currentSection.isVisible
+                                  ? "Hide Section"
+                                  : "Restore All"
+                              }
                               variant="ghost"
                               onPress={() =>
                                 performSectionVisibilityUpdate(
@@ -1740,17 +1846,24 @@ export default function AdminDashboard() {
                                   !currentSection.isVisible,
                                 )
                               }
-                              disabled={busyKey === `section-toggle-${currentSection.name}`}
+                              disabled={
+                                busyKey ===
+                                `section-toggle-${currentSection.name}`
+                              }
                               style={styles.inlineAction}
                             />
                           </View>
 
-                          <Text style={styles.sectionItemsTitle}>Items in this section</Text>
+                          <Text style={styles.sectionItemsTitle}>
+                            Items in this section
+                          </Text>
                           {currentSection.items.map((item) => (
                             <View key={item.id} style={styles.itemRowCard}>
                               <View style={styles.itemRowTop}>
                                 <View style={styles.itemRowText}>
-                                  <Text style={styles.itemRowTitle}>{item.label}</Text>
+                                  <Text style={styles.itemRowTitle}>
+                                    {item.label}
+                                  </Text>
                                   <Text style={styles.itemRowMeta}>
                                     {item.active
                                       ? "Visible to requesters"
@@ -1760,7 +1873,9 @@ export default function AdminDashboard() {
                                 <View
                                   style={[
                                     styles.badge,
-                                    item.active ? styles.badgeVisible : styles.badgeMuted,
+                                    item.active
+                                      ? styles.badgeVisible
+                                      : styles.badgeMuted,
                                   ]}
                                 >
                                   <Text style={styles.badgeText}>
@@ -1774,15 +1889,22 @@ export default function AdminDashboard() {
                                   onPress={() => openEditItem(item)}
                                   activeOpacity={0.8}
                                 >
-                                  <Text style={styles.microActionText}>Rename</Text>
+                                  <Text style={styles.microActionText}>
+                                    Rename
+                                  </Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                   style={styles.microAction}
                                   onPress={() =>
-                                    handleToggleItemVisibility(item, !item.active)
+                                    handleToggleItemVisibility(
+                                      item,
+                                      !item.active,
+                                    )
                                   }
                                   activeOpacity={0.8}
-                                  disabled={busyKey === `item-toggle-${item.id}`}
+                                  disabled={
+                                    busyKey === `item-toggle-${item.id}`
+                                  }
                                 >
                                   <Text style={styles.microActionText}>
                                     {item.active ? "Hide" : "Restore"}
@@ -1830,13 +1952,18 @@ export default function AdminDashboard() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            {focusedComplaint && focusedComplaintMeta && focusedComplaintStatusMeta ? (
+            {focusedComplaint &&
+            focusedComplaintMeta &&
+            focusedComplaintStatusMeta ? (
               <>
                 <View style={styles.modalHeader}>
                   <View style={styles.modalTitleBlock}>
-                    <Text style={styles.modalTitle}>{focusedComplaintMeta.label}</Text>
+                    <Text style={styles.modalTitle}>
+                      {focusedComplaintMeta.label}
+                    </Text>
                     <Text style={styles.modalSubtitle}>
-                      Order #{focusedComplaint.order_id} • {formatTimestamp(focusedComplaint.created_at)}
+                      Order #{focusedComplaint.order_id} •{" "}
+                      {formatTimestamp(focusedComplaint.created_at)}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -1865,7 +1992,8 @@ export default function AdminDashboard() {
                     style={[
                       styles.badge,
                       {
-                        backgroundColor: focusedComplaintStatusMeta.backgroundColor,
+                        backgroundColor:
+                          focusedComplaintStatusMeta.backgroundColor,
                         borderColor: focusedComplaintStatusMeta.borderColor,
                       },
                     ]}
@@ -1890,12 +2018,15 @@ export default function AdminDashboard() {
 
                   <Text style={styles.queueLabel}>Complaint details</Text>
                   <Text style={styles.queueValue}>
-                    {focusedComplaint.description || "No extra details were included."}
+                    {focusedComplaint.description ||
+                      "No extra details were included."}
                   </Text>
 
                   {focusedComplaintOrder ? (
                     <>
-                      <Text style={styles.queueLabel}>Related order status</Text>
+                      <Text style={styles.queueLabel}>
+                        Related order status
+                      </Text>
                       <Text style={styles.queueValue}>
                         {getOrderStatusBadge(focusedComplaintOrder).label} •{" "}
                         {getCustomerLabel(
@@ -1907,7 +2038,9 @@ export default function AdminDashboard() {
                       <Text style={styles.queueLabel}>Order snapshot</Text>
                       <Text style={styles.queueValue}>
                         {focusedComplaintOrderSummary?.boxCount || 1} box
-                        {(focusedComplaintOrderSummary?.boxCount || 1) === 1 ? "" : "es"}{" "}
+                        {(focusedComplaintOrderSummary?.boxCount || 1) === 1
+                          ? ""
+                          : "es"}{" "}
                         •{" "}
                         {focusedComplaintOrderSummary?.itemLabels?.length
                           ? focusedComplaintOrderSummary.itemLabels.join(", ")
@@ -1923,7 +2056,8 @@ export default function AdminDashboard() {
                         handleSetReportStatus(focusedComplaint, "resolved")
                       }
                       disabled={
-                        busyKey === `report-${focusedComplaint.order_id}-resolved`
+                        busyKey ===
+                        `report-${focusedComplaint.order_id}-resolved`
                       }
                       style={styles.modalActionButton}
                     />
@@ -1951,7 +2085,9 @@ export default function AdminDashboard() {
                 <View style={styles.modalHeader}>
                   <View style={styles.modalTitleBlock}>
                     <Text style={styles.modalTitle}>
-                      {pantryEditor.mode === "create" ? "Add pantry" : "Edit pantry"}
+                      {pantryEditor.mode === "create"
+                        ? "Add pantry"
+                        : "Edit pantry"}
                     </Text>
                     <Text style={styles.modalSubtitle}>
                       {pantryEditor.mode === "create"
@@ -1959,7 +2095,10 @@ export default function AdminDashboard() {
                         : "Changes take effect after the volunteer app refreshes."}
                     </Text>
                   </View>
-                  <TouchableOpacity onPress={closePantryEditor} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    onPress={closePantryEditor}
+                    activeOpacity={0.7}
+                  >
                     <Text style={styles.modalClose}>Close</Text>
                   </TouchableOpacity>
                 </View>
@@ -1975,11 +2114,13 @@ export default function AdminDashboard() {
                     placeholderTextColor={theme.colors.mutedText}
                     value={pantryEditor.name}
                     onChangeText={(text) =>
-                      setPantryEditor((p) => p ? { ...p, name: text } : p)
+                      setPantryEditor((p) => (p ? { ...p, name: text } : p))
                     }
                   />
 
-                  <Text style={[styles.inputLabel, { marginTop: theme.spacing.md }]}>
+                  <Text
+                    style={[styles.inputLabel, { marginTop: theme.spacing.md }]}
+                  >
                     Address
                   </Text>
                   <TextInput
@@ -1988,11 +2129,13 @@ export default function AdminDashboard() {
                     placeholderTextColor={theme.colors.mutedText}
                     value={pantryEditor.address}
                     onChangeText={(text) =>
-                      setPantryEditor((p) => p ? { ...p, address: text } : p)
+                      setPantryEditor((p) => (p ? { ...p, address: text } : p))
                     }
                   />
 
-                  <Text style={[styles.inputLabel, { marginTop: theme.spacing.md }]}>
+                  <Text
+                    style={[styles.inputLabel, { marginTop: theme.spacing.md }]}
+                  >
                     Hours
                   </Text>
                   <TextInput
@@ -2001,13 +2144,17 @@ export default function AdminDashboard() {
                     placeholderTextColor={theme.colors.mutedText}
                     value={pantryEditor.hours}
                     onChangeText={(text) =>
-                      setPantryEditor((p) => p ? { ...p, hours: text } : p)
+                      setPantryEditor((p) => (p ? { ...p, hours: text } : p))
                     }
                   />
 
                   <View style={styles.modalActions}>
                     <AppButton
-                      title={pantryEditor.mode === "create" ? "Add Pantry" : "Save Changes"}
+                      title={
+                        pantryEditor.mode === "create"
+                          ? "Add Pantry"
+                          : "Save Changes"
+                      }
                       onPress={handleSavePantry}
                       disabled={busyKey === "pantry-save"}
                       style={styles.modalActionButton}
@@ -2105,7 +2252,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  
+
   eyebrow: {
     color: theme.colors.primary,
     fontSize: 13,
@@ -2565,4 +2712,3 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 });
-
