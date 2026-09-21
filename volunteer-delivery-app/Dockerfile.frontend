@@ -1,0 +1,24 @@
+# Stage 1: build the static web export
+FROM node:24-alpine AS build
+WORKDIR /usr/src/app
+
+ARG EXPO_PUBLIC_SUPABASE_URL
+ARG EXPO_PUBLIC_SUPABASE_ANON_KEY
+ENV EXPO_PUBLIC_SUPABASE_URL=$EXPO_PUBLIC_SUPABASE_URL
+ENV EXPO_PUBLIC_SUPABASE_ANON_KEY=$EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npx expo export --platform web
+
+# Stage 2: serve the built static files
+FROM node:24-alpine
+WORKDIR /usr/src/app
+RUN npm install -g serve
+
+COPY --from=build /usr/src/app/dist ./dist
+
+EXPOSE 8081
+CMD ["serve", "dist", "-l", "8081"]
