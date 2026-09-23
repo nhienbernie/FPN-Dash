@@ -29,7 +29,6 @@ API.
 ```text
 .
 +-- README.md
-+-- Sprint5_Report.pptx
 `-- volunteer-delivery-app/
     +-- app/                 # Expo Router screens
     +-- assets/              # App icons and map pins
